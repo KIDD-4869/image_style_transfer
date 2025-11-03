@@ -18,13 +18,21 @@
             padding: 20px;
         }
         
+        body.dark {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        }
+        
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
+        }
+        
+        .dark .container {
+            background: #2c3e50;
+            color: white;
         }
         
         .header {
@@ -32,6 +40,10 @@
             color: white;
             text-align: center;
             padding: 40px 20px;
+        }
+        
+        .dark .header {
+            background: linear-gradient(135deg, #3498db 0%, #8e44ad 100%);
         }
         
         .header h1 {
@@ -61,6 +73,10 @@
             font-size: 1.2em;
         }
         
+        .dark .style-selection h3 {
+            color: white;
+        }
+        
         .style-options {
             display: flex;
             justify-content: center;
@@ -79,9 +95,19 @@
             background: #f8f9fa;
         }
         
+        .dark .style-option {
+            background: #34495e;
+            border-color: #7f8c8d;
+        }
+        
         .style-option:hover {
             border-color: #667eea;
             background: #f0f2f5;
+        }
+        
+        .dark .style-option:hover {
+            border-color: #3498db;
+            background: #3d566e;
         }
         
         .style-option input[type="radio"] {
@@ -93,10 +119,18 @@
             font-weight: bold;
         }
         
+        .dark .style-option input[type="radio"]:checked + .style-label {
+            color: #3498db;
+        }
+        
         .style-label {
             font-size: 1em;
             color: #666;
             transition: all 0.3s ease;
+        }
+        
+        .dark .style-label {
+            color: #ecf0f1;
         }
         
         .upload-area {
@@ -109,9 +143,19 @@
             background: #f8f9fa;
         }
         
+        .dark .upload-area {
+            background: #34495e;
+            border-color: #3498db;
+        }
+        
         .upload-area:hover {
             border-color: #ff6b6b;
             background: #f0f2f5;
+        }
+        
+        .dark .upload-area:hover {
+            border-color: #e74c3c;
+            background: #3d566e;
         }
         
         .upload-area.dragover {
@@ -119,10 +163,19 @@
             background: #e8f4f8;
         }
         
+        .dark .upload-area.dragover {
+            border-color: #e74c3c;
+            background: #2c3e50;
+        }
+        
         .upload-icon {
             font-size: 48px;
             color: #667eea;
             margin-bottom: 15px;
+        }
+        
+        .dark .upload-icon {
+            color: #3498db;
         }
         
         .file-input {
@@ -164,6 +217,12 @@
             margin-top: 30px;
         }
         
+        @media (max-width: 768px) {
+            .images-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
         .image-card {
             background: #f8f9fa;
             border-radius: 15px;
@@ -172,9 +231,17 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
+        .dark .image-card {
+            background: #34495e;
+        }
+        
         .image-card h3 {
             margin-bottom: 15px;
             color: #333;
+        }
+        
+        .dark .image-card h3 {
+            color: white;
         }
         
         .image-preview {
@@ -200,6 +267,11 @@
             margin: 0 auto 20px;
         }
         
+        .dark .spinner {
+            border: 4px solid #34495e;
+            border-top: 4px solid #3498db;
+        }
+        
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -212,6 +284,11 @@
             border-radius: 10px;
             margin: 20px 0;
             display: none;
+        }
+        
+        .dark .error {
+            background: #3d566e;
+            color: #ff6b6b;
         }
         
         /* 进度条样式 */
@@ -230,12 +307,20 @@
             margin-bottom: 10px;
         }
         
+        .dark .progress-bar {
+            background: #34495e;
+        }
+        
         .progress-fill {
             height: 100%;
             background: linear-gradient(90deg, #667eea, #764ba2);
             border-radius: 10px;
             width: 0%;
             transition: width 0.3s ease;
+        }
+        
+        .dark .progress-fill {
+            background: linear-gradient(90deg, #3498db, #8e44ad);
         }
         
         .progress-info {
@@ -245,11 +330,22 @@
             color: #666;
         }
         
+        .dark .progress-info {
+            color: #ecf0f1;
+        }
+        
         .action-buttons {
             display: flex;
             gap: 15px;
             justify-content: center;
             margin-top: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
         }
         
         .action-btn {
@@ -271,18 +367,28 @@
             color: white;
         }
         
-        @media (max-width: 768px) {
-            .images-container {
-                grid-template-columns: 1fr;
-            }
-            
-            .header h1 {
-                font-size: 2em;
-            }
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            color: white;
+            font-size: 18px;
+        }
+        
+        .dark .theme-toggle {
+            background: rgba(0, 0, 0, 0.3);
         }
     </style>
 </head>
 <body>
+    <button class="theme-toggle" id="themeToggle">🌙</button>
+    
     <div class="container">
         <div class="header">
             <h1>🎨 宫崎骏风格图片转换器</h1>
@@ -291,27 +397,38 @@
         
         <div class="upload-section">
             <div class="style-selection">
-                <h3>选择风格类型：</h3>
-                <div class="style-options">
-                    <label class="style-option">
-                        <input type="radio" name="style" value="ghibli" checked>
-                        <span class="style-label">🎨 宫崎骏风格</span>
+                <h3>🎨 宫崎骏动漫风格转换器</h3>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">将您的图片一键转换为宫崎骏动漫风格</p>
+            </div>
+            
+            <!-- 神经网络风格迁移控制面板 -->
+            <div class="neural-controls" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                <h4 style="margin-bottom: 15px; color: #333;">🧠 高级神经网络设置</h4>
+                
+                <div class="control-group" style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="useNeural" checked style="margin-right: 10px;">
+                        <span>启用神经网络风格迁移 (更高质量)</span>
                     </label>
-                    <label class="style-option">
-                        <input type="radio" name="style" value="anime">
-                        <span class="style-label">📺 通用动漫风</span>
-                    </label>
-                    <label class="style-option">
-                        <input type="radio" name="style" value="painting">
-                        <span class="style-label">🖌️ 绘画风格</span>
-                    </label>
+                    <p style="font-size: 0.8em; color: #666; margin: 5px 0 0 25px;">使用预训练的深度神经网络进行风格迁移，效果更好但处理时间稍长</p>
+                </div>
+                
+                <div class="control-group" style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">风格强度: <span id="intensityValue">1.0</span></label>
+                    <input type="range" id="styleIntensity" min="0.5" max="2.0" step="0.1" value="1.0" 
+                           style="width: 100%; height: 6px; border-radius: 3px; background: #ddd; outline: none;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #666;">
+                        <span>柔和</span>
+                        <span>适中</span>
+                        <span>强烈</span>
+                    </div>
                 </div>
             </div>
             
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📁</div>
                 <h3>点击或拖拽图片到这里</h3>
-                <p>支持 JPG、PNG 格式，最大 16MB</p>
+                <p>支持 JPG、PNG 格式，最大 20MB，支持任意尺寸图片</p>
                 <input type="file" id="fileInput" class="file-input" accept="image/*">
             </div>
             <button class="upload-btn" id="uploadBtn" disabled>开始转换</button>
@@ -320,7 +437,7 @@
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <h3>正在转换中，请稍候...</h3>
-            <p>正在将您的图片转换为宫崎骏风格</p>
+            <p id="progressStatus">正在将您的图片转换为宫崎骏风格</p>
             
             <!-- 进度条 -->
             <div class="progress-container">
@@ -329,7 +446,6 @@
                 </div>
                 <div class="progress-info" id="progressInfo">
                     <span>0%</span>
-                    <span id="progressDetails">步骤 0/100</span>
                 </div>
             </div>
         </div>
@@ -366,8 +482,25 @@
         const resultImage = document.getElementById('resultImage');
         const downloadBtn = document.getElementById('downloadBtn');
         const newImageBtn = document.getElementById('newImageBtn');
+        const themeToggle = document.getElementById('themeToggle');
         
         let currentResultImage = null;
+        let currentTaskId = null;
+        let pollInterval = null;
+        
+        // 风格强度滑块实时显示
+        const styleIntensitySlider = document.getElementById('styleIntensity');
+        const intensityValue = document.getElementById('intensityValue');
+        
+        styleIntensitySlider.addEventListener('input', function() {
+            intensityValue.textContent = this.value;
+        });
+        
+        // 主题切换
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark');
+            themeToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+        });
         
         // 拖拽功能
         uploadArea.addEventListener('dragover', (e) => {
@@ -407,8 +540,8 @@
                 return;
             }
             
-            if (file.size > 16 * 1024 * 1024) {
-                showError('文件大小不能超过16MB');
+            if (file.size > 20 * 1024 * 1024) {
+                showError('文件大小不能超过20MB');
                 return;
             }
             
@@ -431,9 +564,15 @@
             const formData = new FormData();
             formData.append('file', file);
             
-            // 获取选中的风格类型
-            const selectedStyle = document.querySelector('input[name="style"]:checked').value;
-            formData.append('style_type', selectedStyle);
+            // 获取神经网络风格迁移参数
+            const useNeural = document.getElementById('useNeural').checked;
+            const styleIntensity = document.getElementById('styleIntensity').value;
+            
+            formData.append('use_neural', useNeural);
+            formData.append('style_intensity', styleIntensity);
+            
+            // 固定使用宫崎骏风格
+            formData.append('style_type', 'ghibli');
             
             // 显示加载中
             loading.style.display = 'block';
@@ -453,13 +592,10 @@
                 
                 if (result.success) {
                     // 保存任务ID
-                    const taskId = result.task_id;
-                    
-                    // 显示原图
-                    originalImage.src = result.original;
+                    currentTaskId = result.task_id;
                     
                     // 开始轮询进度
-                    pollProgress(taskId);
+                    startPollingProgress();
                     
                 } else {
                     throw new Error(result.error || '转换失败');
@@ -472,63 +608,95 @@
             }
         });
         
-        // 轮询进度
-        async function pollProgress(taskId) {
-            try {
-                const response = await fetch(`/progress/${taskId}`);
-                const progress = await response.json();
-                
-                if (progress.error) {
-                    throw new Error(progress.error);
-                }
-                
-                // 更新进度条
-                updateProgress(
-                    progress.progress || 0,
-                    progress.current_step || 0,
-                    progress.total_steps || 100
-                );
-                
-                // 检查是否完成
-                if (progress.progress < 100) {
-                    // 继续轮询
-                    setTimeout(() => pollProgress(taskId), 500);
-                } else {
-                    // 获取最终结果
-                    setTimeout(() => getFinalResult(taskId), 1000);
-                }
-                
-            } catch (err) {
-                console.error('进度查询失败:', err);
-                // 继续轮询，可能是临时错误
-                setTimeout(() => pollProgress(taskId), 1000);
+        // 开始轮询进度
+        function startPollingProgress() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
             }
+            
+            pollInterval = setInterval(async () => {
+                if (!currentTaskId) return;
+                
+                try {
+                    const response = await fetch(`/progress/${currentTaskId}`);
+                    
+                    if (!response.ok) {
+                        // 如果HTTP状态码不是200，可能是任务尚未开始或正在初始化
+                        console.log('进度查询HTTP错误，任务可能正在初始化，继续等待...');
+                        return;
+                    }
+                    
+                    const progress = await response.json();
+                    
+                    if (progress.error) {
+                        // 如果进度查询返回错误，可能是任务尚未开始
+                        console.log('进度查询返回错误，任务可能正在初始化，继续等待...');
+                        return;
+                    }
+                    
+                    // 更新进度条
+                    const currentProgress = progress.progress || 0;
+                    updateProgress(currentProgress);
+                    
+                    // 更新状态文本
+                    const statusText = document.getElementById('progressStatus');
+                    statusText.textContent = `正在转换图片... (${currentProgress}%)`;
+                    
+                    // 检查是否完成
+                    if (currentProgress >= 100) {
+                        clearInterval(pollInterval);
+                        // 获取最终结果
+                        setTimeout(getFinalResult, 1000);
+                    }
+                    
+                } catch (err) {
+                    console.error('进度查询失败:', err);
+                    // 网络错误，继续等待
+                }
+            }, 2000); // 改为2秒轮询一次，减少服务器压力
         }
         
         // 获取最终结果
-        async function getFinalResult(taskId) {
+        async function getFinalResult() {
+            if (!currentTaskId) return;
+            
             try {
-                const response = await fetch(`/result/${taskId}`);
+                const response = await fetch(`/result/${currentTaskId}`);
                 const result = await response.json();
                 
                 if (result.success) {
                     // 显示结果
+                    originalImage.src = result.original;
                     resultImage.src = result.result;
                     currentResultImage = result.result;
                     
-                    // 显示使用的风格类型
-                    const selectedStyle = document.querySelector('input[name="style"]:checked').value;
-                    const styleName = getStyleName(selectedStyle);
-                    document.querySelector('.results-section h2').textContent = `${styleName} 转换结果`;
+                    // 固定显示宫崎骏风格
+                    document.querySelector('.results-section h2').textContent = '宫崎骏风格转换结果';
                     
                     resultsSection.style.display = 'block';
                     loading.style.display = 'none';
                     
                     // 显示完成消息
-                    updateProgress(100, 100, 100, '转换完成！');
+                    updateProgress(100);
                     
                 } else {
-                    throw new Error(result.error || '转换失败');
+                    if (result.error === '任务仍在处理中' || result.error === '转换尚未完成') {
+                        // 更新进度信息
+                        if (result.progress !== undefined) {
+                            updateProgress(result.progress);
+                        }
+                        
+                        // 继续轮询
+                        console.log('任务仍在处理中，继续等待...');
+                        setTimeout(getFinalResult, 1000);
+                    } else if (result.error === '任务不存在或已完成') {
+                        // 任务已完成但结果已过期，重新开始
+                        showError('任务已完成，请重新上传图片');
+                        loading.style.display = 'none';
+                        uploadBtn.disabled = false;
+                    } else {
+                        throw new Error(result.error || '转换失败');
+                    }
                 }
                 
             } catch (err) {
@@ -539,30 +707,28 @@
         }
         
         // 更新进度显示
-        function updateProgress(percent, currentStep, totalSteps, message = null) {
+        function updateProgress(percent) {
             const progressFill = document.getElementById('progressFill');
             const progressPercent = document.querySelector('.progress-info span:first-child');
-            const progressDetails = document.getElementById('progressDetails');
             
             progressFill.style.width = percent + '%';
             progressPercent.textContent = percent + '%';
-            
-            if (message) {
-                progressDetails.textContent = message;
-            } else {
-                progressDetails.textContent = `步骤 ${currentStep}/${totalSteps}`;
-            }
         }
         
-        // 获取风格名称
-        function getStyleName(styleType) {
-            const styleMap = {
-                'ghibli': '宫崎骏风格',
-                'anime': '通用动漫风',
-                'painting': '绘画风格'
+        // 获取进度状态文本
+        function getProgressStatusText(status) {
+            const statusMap = {
+                'queued': '排队等待',
+                'processing': '处理图像',
+                'resizing': '调整图像大小',
+                'encoding': '编码图像',
+                'completed': '完成处理',
+                'error': '处理出错'
             };
-            return styleMap[styleType] || '宫崎骏风格';
+            return statusMap[status] || status;
         }
+        
+
         
         // 下载功能
         downloadBtn.addEventListener('click', () => {
@@ -570,7 +736,7 @@
             
             const link = document.createElement('a');
             link.href = currentResultImage;
-            link.download = '宫崎骏风格图片.png';
+            link.download = '风格转换图片.png';
             link.click();
         });
         
@@ -583,6 +749,12 @@
             resultsSection.style.display = 'none';
             error.style.display = 'none';
             currentResultImage = null;
+            currentTaskId = null;
+            
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
         });
         
         // 显示错误
