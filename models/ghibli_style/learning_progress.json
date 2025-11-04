@@ -1,0 +1,14 @@
+{
+  "downloaded_count": 1000,
+  "processed_count": 1000,
+  "learning_progress": 1,
+  "current_batch": 18,
+  "timestamp": 1762247968.414834,
+  "ghibli_features": {
+    "saturation": 129.26353339948838,
+    "brightness": 188.9972284788277,
+    "warmth": 0.04984642838213345,
+    "edge_strength": 30.91,
+    "texture_smoothness": 31.02
+  }
+}

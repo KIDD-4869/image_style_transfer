@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 from config.settings import config
 from core.real_ghibli_transfer import RealGhibliStyleTransfer
+from core.ghibli_enhanced import GhibliEnhancedTransfer
+from auto_learning import RealGhibliStyleTransferWithLearning
 
 app = Flask(__name__)
 
@@ -25,6 +27,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # 初始化宫崎骏风格转换模型
 real_ghibli_model = RealGhibliStyleTransfer(use_neural_network=True)
+ghibli_enhanced_model = GhibliEnhancedTransfer()
 
 # 任务管理
 task_progress = {}
@@ -41,7 +44,7 @@ def update_progress(task_id, progress, current_step, total_steps, loss):
     }
     print(f"📊 任务 {task_id}: {progress}% (步骤 {current_step}/{total_steps}, 损失: {loss:.4f})")
 
-def convert_image_async(task_id, image, use_neural=True, style_intensity=1.0):
+def convert_image_async(task_id, image, use_neural=True, style_intensity=1.0, use_enhanced=False):
     """异步转换图像
     
     Args:
@@ -49,24 +52,38 @@ def convert_image_async(task_id, image, use_neural=True, style_intensity=1.0):
         image: 输入图像
         use_neural: 是否使用神经网络风格迁移
         style_intensity: 风格强度 (0.5-2.0)
+        use_enhanced: 是否使用增强版功能
     """
     try:
-        # 设置进度回调
-        real_ghibli_model.set_progress_callback(update_progress, task_id)
-        
-        # 根据风格强度调整参数
-        style_weight = int(300000 * style_intensity)
-        num_steps = max(50, min(200, int(100 * style_intensity)))
-        
-        print(f"🎯 转换参数: 神经网络={use_neural}, 风格强度={style_intensity}, 步数={num_steps}")
-        
-        # 开始转换
-        result_image = real_ghibli_model.apply_real_ghibli_style(
-            image, 
-            num_steps=num_steps, 
-            style_weight=style_weight,
-            use_neural=use_neural
-        )
+        if use_enhanced:
+            # 使用增强版功能
+            print("🎨 使用增强版宫崎骏风格转换")
+            
+            # 设置进度回调
+            ghibli_enhanced_model.set_progress_callback(update_progress, task_id)
+            
+            # 开始转换
+            result_image = ghibli_enhanced_model.apply_enhanced_ghibli_style(image)
+        else:
+            # 使用基础版功能
+            print("🎨 使用基础版宫崎骏风格转换")
+            
+            # 设置进度回调
+            real_ghibli_model.set_progress_callback(update_progress, task_id)
+            
+            # 根据风格强度调整参数
+            style_weight = int(300000 * style_intensity)
+            num_steps = max(50, min(200, int(100 * style_intensity)))
+            
+            print(f"🎯 转换参数: 神经网络={use_neural}, 风格强度={style_intensity}, 步数={num_steps}")
+            
+            # 开始转换
+            result_image = real_ghibli_model.apply_real_ghibli_style(
+                image, 
+                num_steps=num_steps, 
+                style_weight=style_weight,
+                use_neural=use_neural
+            )
         
         # 保存结果（包括原图）
         task_results[task_id] = {
@@ -223,9 +240,10 @@ def upload_file():
         # 获取处理参数
         use_neural = request.form.get('use_neural', 'true').lower() == 'true'
         style_intensity = float(request.form.get('style_intensity', '1.0'))
+        use_enhanced = request.form.get('use_enhanced', 'false').lower() == 'true'
         
         # 启动异步转换
-        thread = threading.Thread(target=convert_image_async, args=(task_id, image, use_neural, style_intensity))
+        thread = threading.Thread(target=convert_image_async, args=(task_id, image, use_neural, style_intensity, use_enhanced))
         thread.daemon = True
         thread.start()
         
@@ -255,4 +273,4 @@ def upload_file():
         return jsonify({'success': False, 'error': error_msg})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5003)
+    app.run(debug=True, host='0.0.0.0', port=5006)

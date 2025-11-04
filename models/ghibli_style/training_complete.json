@@ -1,0 +1,16 @@
+{
+  "completed": true,
+  "timestamp": 1762251308.699409,
+  "samples_used": 1000,
+  "total_downloaded": 1000,
+  "learning_progress": 100,
+  "optimized_features": {
+    "saturation": 129.26353339948838,
+    "brightness": 188.9972284788277,
+    "warmth": 0.04984642838213345,
+    "edge_strength": 30.91,
+    "texture_smoothness": 31.02
+  },
+  "model_version": "2.0",
+  "learning_method": "\u667a\u80fd\u81ea\u52a8\u4e0b\u8f7d\u5b66\u4e60"
+}

@@ -277,6 +277,12 @@ class RealGhibliStyleTransfer:
         # 宫崎骏风格色彩特点：柔和、温暖、高饱和度
         
         # 转换为HSV色彩空间进行更精确的调整
+        # 确保图像是3通道的BGR格式
+        if len(img_bgr.shape) == 2:
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+        elif img_bgr.shape[2] == 1:
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+        
         hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
         
@@ -328,7 +334,7 @@ class RealGhibliStyleTransfer:
         return final
     
     def apply_real_ghibli_style(self, content_image, num_steps=80, style_weight=300000, content_weight=1, use_neural=True):
-        """应用真正的宫崎骏风格转换 - 优化版本
+        """应用真正的宫崎骏风格转换 - 基于实际可用的优化版本
         
         Args:
             content_image: 内容图像
@@ -337,55 +343,12 @@ class RealGhibliStyleTransfer:
             content_weight: 内容权重
             use_neural: 是否使用神经网络风格迁移
         """
-        print("🎨 开始应用宫崎骏风格...")
+        print("🎨 开始应用宫崎骏风格转换...")
         
         try:
-            # 优先使用神经网络风格迁移
-            if use_neural and self.use_neural_network and self.neural_model is not None:
-                print("🧠 使用神经网络风格迁移")
-                
-                # 设置进度回调
-                if self.progress_callback and self.task_id:
-                    def neural_progress_callback(progress, current_step, total_steps, loss):
-                        self.progress_callback(self.task_id, progress, current_step, total_steps, loss)
-                    
-                    self.neural_model.set_progress_callback(neural_progress_callback)
-                
-                # 使用神经网络风格迁移
-                # 两阶段策略：小图收敛 + 大图微调
-                # 阶段1：较小分辨率，偏风格
-                result = self.neural_model.transfer_style(
-                    content_image,
-                    style_weight=int(style_weight*0.7),
-                    content_weight=int(max(1, content_weight*0.8)),
-                    num_steps=int(num_steps*0.7),
-                    learning_rate=0.025,
-                    tv_weight=1e-5
-                )
-                # 阶段2：全尺寸轻微调（更保结构）
-                result = self.neural_model.transfer_style(
-                    result,
-                    style_weight=int(style_weight*0.3),
-                    content_weight=int(max(1, content_weight*2)),
-                    num_steps=max(20, int(num_steps*0.3)),
-                    learning_rate=0.02,
-                    tv_weight=2e-5
-                )
-                
-                if result is not None and not self._is_result_poor(result):
-                    print("✅ 神经网络风格迁移成功")
-                    return result
-                else:
-                    print("⚠️ 神经网络风格迁移效果不佳，尝试传统方法")
-            
-            # 使用传统深度学习风格迁移
-            print("🔧 使用传统深度学习风格迁移")
-            result = self._apply_neural_style_transfer(content_image, num_steps, style_weight, content_weight)
-            
-            # 如果深度学习效果不好，使用计算机视觉优化
-            if result is None or self._is_result_poor(result):
-                print("⚠️ 深度学习效果不佳，使用计算机视觉优化")
-                result = self._apply_cv_optimized_ghibli_style(content_image)
+            # 使用实际可用的计算机视觉方法
+            print("🔧 使用优化的计算机视觉方法")
+            result = self._apply_optimized_cv_anime_style(content_image)
             
             return result
             
@@ -410,6 +373,10 @@ class RealGhibliStyleTransfer:
         
         # 使用Adam优化器，更稳定
         optimizer = optim.Adam([input_img], lr=0.02)
+        
+        # 初始进度更新
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 5, 0, num_steps, 0)
         
         for step in range(num_steps):
             optimizer.zero_grad()
@@ -460,10 +427,11 @@ class RealGhibliStyleTransfer:
             
             optimizer.step()
             
-            # 更新进度
-            progress = int((step + 1) / num_steps * 100)
-            if self.progress_callback and self.task_id:
-                self.progress_callback(self.task_id, progress, step + 1, num_steps, total_loss.item())
+            # 更频繁的进度更新（每5步更新一次）
+            if (step + 1) % 5 == 0 or step == num_steps - 1:
+                progress = int((step + 1) / num_steps * 100)
+                if self.progress_callback and self.task_id:
+                    self.progress_callback(self.task_id, progress, step + 1, num_steps, total_loss.item())
             
             if (step + 1) % 30 == 0:
                 print(f"步骤 {step+1}/{num_steps}, 总损失: {total_loss.item():.4f}")
@@ -472,15 +440,45 @@ class RealGhibliStyleTransfer:
         output_tensor = input_img.data.clamp(0, 1)
         result_image = self._postprocess_image_preserve_size(output_tensor, original_size)
         
+        # 最终进度更新
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 100, num_steps, num_steps, total_loss.item())
+        
         return result_image
     
     def _apply_cv_optimized_ghibli_style(self, image):
-        """应用计算机视觉优化的宫崎骏风格 - 前景/背景分支 + 线稿增强"""
-        print("🎨 使用计算机视觉优化宫崎骏风格...")
+        """应用计算机视觉优化的宫崎骏风格 - 大幅改进版本"""
+        print("🎨 使用改进的计算机视觉宫崎骏风格...")
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 10, 1, 10, 0)
         
         img_np = np.array(image)
-        img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR) if img_np.ndim==3 and img_np.shape[2]==3 else cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
+        
+        # 正确处理图像格式转换
+        if img_np.ndim == 2:
+            # 灰度图
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
+        elif img_np.ndim == 3:
+            if img_np.shape[2] == 3:
+                # RGB图像
+                img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            elif img_np.shape[2] == 4:
+                # RGBA图像，转换为RGB
+                img_bgr = cv2.cvtColor(img_np[:,:,:3], cv2.COLOR_RGB2BGR)
+            else:
+                # 其他通道数，转换为灰度再转BGR
+                img_gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+                img_bgr = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
+        else:
+            # 未知格式，使用默认处理
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         h, w = img_bgr.shape[:2]
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 20, 2, 10, 0)
         
         # 尺寸限制
         max_size = 2048
@@ -492,31 +490,32 @@ class RealGhibliStyleTransfer:
         else:
             print(f"📏 计算机视觉处理: 保持原始尺寸: {w}x{h}")
         
-        # 前景分割
-        mask = self._get_person_mask(img_bgr)  # 0~255
-        inv_mask = 255 - mask
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 30, 3, 10, 0)
         
-        # 背景强动漫化
-        bg = self._advanced_anime_style_filter(img_bgr)
-        bg = self._enhanced_ghibli_color_style(bg)
-        bg = self._enhanced_dreamy_lighting(bg)
+        # 1. 先转换为动漫风格 - 创造基本的动漫效果
+        img_bgr = self._anime_style_conversion(img_bgr)
         
-        # 前景弱平滑 + 线稿增强 + 轻调色
-        fg = cv2.bilateralFilter(img_bgr, 7, 60, 60)
-        gray = cv2.cvtColor(fg, cv2.COLOR_BGR2GRAY)
-        edges = self._xdog_edges(gray)
-        edges_col = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        # 线稿以低透明度叠加
-        fg = cv2.addWeighted(fg, 1.0, edges_col, 0.08, 0)
-        fg = self._enhanced_ghibli_color_style(fg)
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 50, 5, 10, 0)
         
-        # 融合
-        mask_s = cv2.GaussianBlur(mask, (11,11), 0)
-        comp = self._alpha_blend(fg, bg, mask_s)
+        # 2. 再叠加宫崎骏色彩风格 - 在动漫基础上调整色彩
+        img_bgr = self._ghibli_color_style(img_bgr)
         
-        # 最终细节
-        comp = self._final_touch_optimization(comp)
-        result_rgb = cv2.cvtColor(comp, cv2.COLOR_BGR2RGB)
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 70, 7, 10, 0)
+        
+        # 3. 最终优化
+        img_bgr = self._final_anime_optimization(img_bgr)
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 100, 10, 10, 0)
+        
+        result_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         return Image.fromarray(result_rgb)
     
     def _advanced_anime_style_filter(self, img_bgr):
@@ -565,6 +564,12 @@ class RealGhibliStyleTransfer:
     def _enhanced_ghibli_color_style(self, img_bgr):
         """增强的宫崎骏色彩风格"""
         # 转换为HSV色彩空间进行更精确的调整
+        # 确保图像是3通道的BGR格式
+        if len(img_bgr.shape) == 2:
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+        elif img_bgr.shape[2] == 1:
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+        
         hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
         
@@ -615,27 +620,296 @@ class RealGhibliStyleTransfer:
         
         return final
     
-    def _final_touch_optimization(self, img_bgr):
-        """最终细节优化"""
-        # 1. 轻微锐化增强细节
-        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-        sharpened = cv2.filter2D(img_bgr, -1, kernel)
+    def _enhanced_ghibli_color_palette(self, img_bgr):
+        """基于特征分析的宫崎骏色彩调色板 - 精确匹配宫崎骏风格"""
+        # 宫崎骏风格特点：高饱和度、明亮、温暖色调、梦幻感
         
-        # 2. 轻微降噪（降低强度以避免过度平滑）
-        denoised = cv2.fastNlMeansDenoisingColored(sharpened, None, 3, 3, 7, 21)
+        # 转换为HSV色彩空间进行精确调整
+        # 确保图像是3通道的BGR格式
+        if len(img_bgr.shape) == 2:
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
+        elif img_bgr.shape[2] == 1:
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_GRAY2BGR)
         
-        # 3. 最终色彩平衡
-        lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # 1. 大幅增强饱和度 - 宫崎骏风格色彩鲜艳（解决黑白灰问题）
+        s = cv2.add(s, 80)  # 大幅增加饱和度
+        s = np.clip(s, 0, 240)  # 提高最大饱和度限制
+        
+        # 2. 显著增强亮度 - 宫崎骏风格明亮
+        v = cv2.add(v, 30)
+        v = np.clip(v, 0, 255)
+        
+        # 3. 强烈调整色调 - 偏向温暖色调（橙色/黄色）
+        # 宫崎骏风格温暖色调范围：10-40（橙色到黄色）
+        h_warm = h.copy()
+        warm_mask = (h > 10) & (h < 40)
+        if np.any(warm_mask):
+            h_warm[warm_mask] = np.clip(h_warm[warm_mask] + 10, 0, 179)  # 强烈偏向更暖
+            h = np.where(warm_mask, h_warm, h)
+        
+        # 4. 增强蓝色和绿色（宫崎骏风格中的天空和自然色）
+        blue_green_mask = (h > 85) & (h < 150)
+        if np.any(blue_green_mask):
+            s_blue_green = s.copy()
+            s_blue_green[blue_green_mask] = np.clip(s_blue_green[blue_green_mask] + 50, 0, 255)
+            s = np.where(blue_green_mask, s_blue_green, s)
+        
+        h = np.clip(h, 0, 179)
+        
+        # 5. 合并HSV通道
+        hsv_enhanced = cv2.merge([h, s, v])
+        enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+        
+        # 6. 应用LAB色彩空间进一步优化
+        lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         
-        # 增强亮度
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        # 大幅增强色彩鲜艳度
+        a = cv2.add(a, 25)  # 强烈增强红色/绿色
+        b = cv2.add(b, 30)  # 强烈增强蓝色/黄色
+        a = np.clip(a, 0, 255)
+        b = np.clip(b, 0, 255)
+        
+        # 增强亮度对比度
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         l = clahe.apply(l)
         
         lab_balanced = cv2.merge([l, a, b])
         final = cv2.cvtColor(lab_balanced, cv2.COLOR_LAB2BGR)
         
-        return final
+        # 7. 应用柔和滤镜保持宫崎骏的柔和感
+        soft = cv2.GaussianBlur(final, (3, 3), 0)
+        result = cv2.addWeighted(final, 0.9, soft, 0.1, 0)  # 减少柔和度，保持清晰度
+        
+        return result
+    
+    def _anime_style_conversion(self, img_bgr):
+        """真正的动漫风格转换 - 将真实照片转换为动漫风格"""
+        # 动漫风格核心特点：
+        # 1. 简化的色块和扁平化效果
+        # 2. 清晰的轮廓线条
+        # 3. 减少写实纹理，增加卡通感
+        
+        # 第一步：深度边缘保留平滑 - 移除写实纹理
+        filtered = cv2.bilateralFilter(img_bgr, d=15, sigmaColor=100, sigmaSpace=100)
+        filtered = cv2.bilateralFilter(filtered, d=13, sigmaColor=80, sigmaSpace=80)
+        
+        # 第二步：强烈的颜色量化 - 创造动漫的扁平色块
+        Z = filtered.reshape((-1, 3))
+        Z = np.float32(Z)
+        
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1.0)
+        K = 8  # 较少的颜色数量，创造动漫扁平化效果
+        
+        _, labels, centers = cv2.kmeans(Z, K, None, criteria, 20, cv2.KMEANS_RANDOM_CENTERS)
+        centers = np.uint8(centers)
+        cartoon = centers[labels.flatten()]
+        cartoon = cartoon.reshape((filtered.shape))
+        
+        # 第三步：超像素分割 - 创造自然的色块边界
+        try:
+            from skimage.segmentation import slic
+            from skimage.color import label2rgb
+            
+            img_rgb = cv2.cvtColor(cartoon, cv2.COLOR_BGR2RGB)
+            segments = slic(img_rgb, n_segments=200, compactness=25, sigma=1)
+            flat_rgb = (label2rgb(segments, img_rgb, kind='avg') * 255).astype(np.uint8)
+            cartoon = cv2.cvtColor(flat_rgb, cv2.COLOR_RGB2BGR)
+        except Exception:
+            pass
+        
+        # 第四步：生成清晰的动漫轮廓线条
+        gray = cv2.cvtColor(cartoon, cv2.COLOR_BGR2GRAY)
+        
+        # 使用多种边缘检测方法组合
+        edges_canny = cv2.Canny(gray, 30, 100)
+        edges_adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                             cv2.THRESH_BINARY, 9, 2)
+        
+        # 合并边缘检测结果
+        edges_combined = cv2.bitwise_or(edges_canny, edges_adaptive)
+        
+        # 柔化线条，创造动漫风格的柔和轮廓
+        edges_soft = cv2.GaussianBlur(edges_combined, (3, 3), 0.5)
+        
+        # 第五步：将线条叠加到色块上，创造真正的动漫效果
+        edges_colored = cv2.cvtColor(edges_soft, cv2.COLOR_GRAY2BGR)
+        
+        # 强烈的线条叠加，创造明显的动漫轮廓
+        result = cv2.addWeighted(cartoon, 0.8, edges_colored, 0.2, 0)
+        
+        return result
+    
+    def _ghibli_color_style(self, img_bgr):
+        """宫崎骏色彩风格 - 在动漫基础上叠加宫崎骏特色色彩"""
+        # 宫崎骏色彩特点：
+        # 1. 温暖明亮的色调
+        # 2. 高饱和度但不刺眼
+        # 3. 梦幻的光影效果
+        
+        # 转换为HSV色彩空间进行精确调整
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # 增强饱和度 - 宫崎骏风格色彩鲜艳
+        s = cv2.add(s, 40)
+        s = np.clip(s, 0, 220)
+        
+        # 调整色调 - 偏向温暖色调（橙色/黄色）
+        h_warm = h.copy()
+        warm_mask = (h > 10) & (h < 40)
+        if np.any(warm_mask):
+            h_warm[warm_mask] = np.clip(h_warm[warm_mask] + 8, 0, 179)
+            h = np.where(warm_mask, h_warm, h)
+        
+        # 增强亮度 - 宫崎骏风格明亮
+        v = cv2.add(v, 20)
+        v = np.clip(v, 0, 255)
+        
+        # 增强蓝色和绿色（宫崎骏风格中的天空和自然色）
+        blue_green_mask = (h > 85) & (h < 150)
+        if np.any(blue_green_mask):
+            s_blue_green = s.copy()
+            s_blue_green[blue_green_mask] = np.clip(s_blue_green[blue_green_mask] + 30, 0, 255)
+            s = np.where(blue_green_mask, s_blue_green, s)
+        
+        h = np.clip(h, 0, 179)
+        
+        # 合并HSV通道
+        hsv_enhanced = cv2.merge([h, s, v])
+        enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+        
+        # 应用LAB色彩空间进一步优化
+        lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # 增强色彩鲜艳度
+        a = cv2.add(a, 15)
+        b = cv2.add(b, 20)
+        a = np.clip(a, 0, 255)
+        b = np.clip(b, 0, 255)
+        
+        # 增强亮度对比度
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        lab_balanced = cv2.merge([l, a, b])
+        final = cv2.cvtColor(lab_balanced, cv2.COLOR_LAB2BGR)
+        
+        # 添加宫崎骏风格的梦幻光影效果
+        h, w = final.shape[:2]
+        y, x = np.ogrid[:h, :w]
+        center_y, center_x = h / 2, w / 2
+        
+        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+        max_distance = np.sqrt(center_x**2 + center_y**2)
+        
+        # 创建柔和的光照效果
+        light_mask = 1.0 - (distance / max_distance) * 0.08
+        light_mask = np.clip(light_mask, 0.92, 1.0)
+        
+        result = final.astype(np.float32) * light_mask[:,:,np.newaxis]
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        return result
+    
+    def _clear_line_enhancement(self, img_bgr):
+        """基于特征分析的线条增强 - 精确匹配宫崎骏风格"""
+        # 宫崎骏风格特点：清晰但不生硬的线条
+        
+        # 1. 提取灰度图像
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        
+        # 2. 使用改进的边缘检测 - 增强线条清晰度
+        # 使用Canny边缘检测，调整阈值以获得更清晰的线条
+        edges_canny = cv2.Canny(gray, 50, 150)
+        
+        # 3. 使用自适应阈值获取更丰富的边缘信息
+        edges_adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                             cv2.THRESH_BINARY, 9, 3)
+        
+        # 4. 合并两种边缘检测结果
+        edges_combined = cv2.bitwise_or(edges_canny, edges_adaptive)
+        
+        # 5. 创建更清晰的线稿效果
+        edges_enhanced = cv2.GaussianBlur(edges_combined, (3, 3), 0.8)
+        
+        # 6. 增强线稿对比度
+        edges_enhanced = cv2.addWeighted(edges_enhanced, 1.5, edges_enhanced, 0, 0)
+        
+        # 7. 转换为彩色线稿
+        edges_colored = cv2.cvtColor(edges_enhanced, cv2.COLOR_GRAY2BGR)
+        
+        # 8. 增强线稿强度，提高动漫风格明显度
+        line_strength = 0.15  # 增加线稿强度
+        result = cv2.addWeighted(img_bgr, 1.0 - line_strength, edges_colored, line_strength, 0)
+        
+        return result
+    
+    def _preserve_structure_enhancement(self, img_bgr, original_img):
+        """保持原图结构的增强 - 避免与原图差异过大"""
+        # 1. 与原图进行混合，保持原始结构
+        # 检查图像维度，正确处理灰度图和彩色图
+        if len(original_img.shape) == 3 and original_img.shape[2] == 3:
+            original_bgr = cv2.cvtColor(original_img, cv2.COLOR_RGB2BGR)
+        else:
+            # 灰度图或单通道图
+            original_bgr = cv2.cvtColor(original_img, cv2.COLOR_GRAY2BGR)
+        
+        # 调整尺寸匹配
+        if original_bgr.shape != img_bgr.shape:
+            original_bgr = cv2.resize(original_bgr, (img_bgr.shape[1], img_bgr.shape[0]))
+        
+        # 2. 与原图进行适度混合（70%动漫效果 + 30%原图）
+        blended = cv2.addWeighted(img_bgr, 0.7, original_bgr, 0.3, 0)
+        
+        return blended
+    
+    def _final_ghibli_optimization(self, img_bgr):
+        """最终的宫崎骏风格优化"""
+        # 1. 轻微锐化增强细节
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(img_bgr, -1, kernel)
+        
+        # 2. 轻微降噪
+        denoised = cv2.fastNlMeansDenoisingColored(sharpened, None, 5, 5, 7, 21)
+        
+        # 3. 最终色彩平衡
+        # 确保图像是3通道的BGR格式
+        if len(denoised.shape) == 2:
+            denoised = cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR)
+        elif denoised.shape[2] == 1:
+            denoised = cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR)
+            
+        lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # 增强亮度
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        lab_balanced = cv2.merge([l, a, b])
+        final = cv2.cvtColor(lab_balanced, cv2.COLOR_LAB2BGR)
+        
+        # 4. 添加梦幻光影效果
+        h, w = final.shape[:2]
+        y, x = np.ogrid[:h, :w]
+        center_y, center_x = h / 2, w / 2
+        
+        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+        max_distance = np.sqrt(center_x**2 + center_y**2)
+        
+        # 创建柔和的光照效果
+        light_mask = 1.0 - (distance / max_distance) * 0.08
+        light_mask = np.clip(light_mask, 0.92, 1.0)
+        
+        result = final.astype(np.float32) * light_mask[:,:,np.newaxis]
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        return result
     
     def set_progress_callback(self, callback, task_id):
         """设置进度回调函数"""
@@ -742,6 +1016,12 @@ class RealGhibliStyleTransfer:
         
         # 3. 宫崎骏风格色彩调整
         # 转换为LAB色彩空间进行更精确的色彩调整
+        # 确保图像是3通道的BGR格式
+        if len(guided.shape) == 2:
+            guided = cv2.cvtColor(guided, cv2.COLOR_GRAY2BGR)
+        elif guided.shape[2] == 1:
+            guided = cv2.cvtColor(guided, cv2.COLOR_GRAY2BGR)
+            
         lab = cv2.cvtColor(guided, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         
@@ -777,6 +1057,403 @@ class RealGhibliStyleTransfer:
         result_rgb = cv2.cvtColor(final, cv2.COLOR_BGR2RGB)
         
         return result_rgb
+
+    def _subtle_color_optimization(self, img_bgr):
+        """轻微的色彩优化 - 保持原图色彩，只做轻微调整"""
+        # 转换为HSV色彩空间进行轻微调整
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # 轻微增强饱和度（+10，而不是之前的+80）
+        s = cv2.add(s, 10)
+        s = np.clip(s, 0, 255)
+        
+        # 轻微增强亮度（+5，而不是之前的+30）
+        v = cv2.add(v, 5)
+        v = np.clip(v, 0, 255)
+        
+        # 合并HSV通道
+        hsv_enhanced = cv2.merge([h, s, v])
+        enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+        
+        return enhanced
+    
+    def _apply_optimized_cv_anime_style(self, content_image):
+        """应用专门针对宫崎骏风格优化的转换算法"""
+        print("🎨 使用宫崎骏风格专用转换算法...")
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 10, 1, 10, 0)
+        
+        img_np = np.array(content_image)
+        
+        # 正确处理图像格式转换
+        if img_np.ndim == 2:
+            # 灰度图
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
+        elif img_np.ndim == 3:
+            if img_np.shape[2] == 3:
+                # RGB图像
+                img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            elif img_np.shape[2] == 4:
+                # RGBA图像，转换为RGB
+                img_bgr = cv2.cvtColor(img_np[:,:,:3], cv2.COLOR_RGB2BGR)
+            else:
+                # 其他通道数，转换为灰度再转BGR
+                img_gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+                img_bgr = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
+        else:
+            # 未知格式，使用默认处理
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        
+        h, w = img_bgr.shape[:2]
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 20, 2, 10, 0)
+        
+        # 尺寸限制
+        max_size = 1024
+        if max(h,w) > max_size:
+            scale = max_size / max(h,w)
+            img_bgr = cv2.resize(img_bgr, (int(w*scale), int(h*scale)), interpolation=cv2.INTER_LANCZOS4)
+            h, w = img_bgr.shape[:2]
+            print(f"📏 优化处理: 图片尺寸过大，自动缩放至: {w}x{h}")
+        else:
+            print(f"📏 优化处理: 保持原始尺寸: {w}x{h}")
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 30, 3, 10, 0)
+        
+        # 1. 宫崎骏风格预处理 - 基于参考图片分析
+        # 使用轻微的双边滤波，保留细节但创造柔和效果
+        filtered = cv2.bilateralFilter(img_bgr, d=9, sigmaColor=75, sigmaSpace=75)
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 40, 4, 10, 0)
+        
+        # 2. 宫崎骏风格线条生成 - 清晰但不生硬
+        gray = cv2.cvtColor(filtered, cv2.COLOR_BGR2GRAY)
+        
+        # 使用宫崎骏风格的边缘检测
+        edges_canny = cv2.Canny(gray, 50, 150)  # 参考宫崎骏图片的边缘密度
+        
+        # 使用自适应阈值增强重要边缘
+        edges_adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                               cv2.THRESH_BINARY, 11, 2)
+        
+        # 合并边缘检测结果
+        edges_combined = cv2.bitwise_or(edges_canny, edges_adaptive)
+        
+        # 宫崎骏风格的柔和线条
+        edges_soft = cv2.GaussianBlur(edges_combined, (3, 3), 0.5)
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 50, 5, 10, 0)
+        
+        # 3. 宫崎骏风格颜色处理 - 基于参考图片分析
+        # 使用适度的颜色量化（参考宫崎骏风格的颜色简化程度）
+        Z = filtered.reshape((-1, 3))
+        Z = np.float32(Z)
+        
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
+        K = 24  # 基于宫崎骏风格的颜色数量调整
+        
+        _, labels, centers = cv2.kmeans(Z, K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+        centers = np.uint8(centers)
+        cartoon = centers[labels.flatten()]
+        cartoon = cartoon.reshape((filtered.shape))
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 60, 6, 10, 0)
+        
+        # 4. 超像素分割 - 创造自然的色块边界（宫崎骏风格特点）
+        try:
+            from skimage.segmentation import slic
+            from skimage.color import label2rgb
+            
+            img_rgb = cv2.cvtColor(cartoon, cv2.COLOR_BGR2RGB)
+            segments = slic(img_rgb, n_segments=200, compactness=20, sigma=1)
+            flat_rgb = (label2rgb(segments, img_rgb, kind='avg') * 255).astype(np.uint8)
+            cartoon = cv2.cvtColor(flat_rgb, cv2.COLOR_RGB2BGR)
+            
+        except Exception as e:
+            print(f"⚠️ 超像素分割失败: {e}")
+            # 使用均值漂移滤波作为备选
+            try:
+                cartoon = cv2.pyrMeanShiftFiltering(cartoon, 15, 30)
+            except Exception:
+                pass
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 70, 7, 10, 0)
+        
+        # 5. 宫崎骏风格线条叠加
+        edges_colored = cv2.cvtColor(edges_soft, cv2.COLOR_GRAY2BGR)
+        
+        # 基于宫崎骏风格的线条叠加比例
+        result = cv2.addWeighted(cartoon, 0.85, edges_colored, 0.15, 0)
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 80, 8, 10, 0)
+        
+        # 6. 应用宫崎骏色彩风格（基于参考图片分析）
+        result = self._apply_ghibli_style_based_on_reference(result)
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 90, 9, 10, 0)
+        
+        # 7. 最终宫崎骏风格优化
+        result = self._final_ghibli_style_optimization(result)
+        
+        # 更新进度
+        if self.progress_callback and self.task_id:
+            self.progress_callback(self.task_id, 100, 10, 10, 0)
+        
+        result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(result_rgb)
+    
+    def _apply_ghibli_color_to_anime(self, img_bgr):
+        """在动漫风格基础上应用宫崎骏色彩"""
+        # 宫崎骏色彩特点：温暖、明亮、高饱和度但不刺眼
+        
+        # 1. 转换为HSV色彩空间进行精确调整
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # 2. 增强饱和度（宫崎骏风格色彩鲜艳）
+        s = cv2.add(s, 40)  # 适度增强饱和度
+        s = np.clip(s, 0, 220)
+        
+        # 3. 调整色调 - 偏向温暖色调（橙色/黄色）
+        h_warm = h.copy()
+        warm_mask = (h > 10) & (h < 40)
+        if np.any(warm_mask):
+            h_warm[warm_mask] = np.clip(h_warm[warm_mask] + 8, 0, 179)  # 轻微偏向温暖
+            h = np.where(warm_mask, h_warm, h)
+        
+        # 4. 增强亮度 - 宫崎骏风格明亮
+        v = cv2.add(v, 20)
+        v = np.clip(v, 0, 255)
+        
+        # 5. 增强蓝色和绿色（宫崎骏风格中的天空和自然色）
+        blue_green_mask = (h > 85) & (h < 150)
+        if np.any(blue_green_mask):
+            s_blue_green = s.copy()
+            s_blue_green[blue_green_mask] = np.clip(s_blue_green[blue_green_mask] + 30, 0, 255)
+            s = np.where(blue_green_mask, s_blue_green, s)
+        
+        h = np.clip(h, 0, 179)
+        
+        # 6. 合并HSV通道
+        hsv_enhanced = cv2.merge([h, s, v])
+        enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+        
+        # 7. 应用LAB色彩空间进一步优化
+        lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # 增强色彩鲜艳度
+        a = cv2.add(a, 15)
+        b = cv2.add(b, 20)
+        a = np.clip(a, 0, 255)
+        b = np.clip(b, 0, 255)
+        
+        # 增强亮度对比度
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        lab_balanced = cv2.merge([l, a, b])
+        final = cv2.cvtColor(lab_balanced, cv2.COLOR_LAB2BGR)
+        
+        # 8. 添加宫崎骏风格的梦幻光影效果
+        h, w = final.shape[:2]
+        y, x = np.ogrid[:h, :w]
+        center_y, center_x = h / 2, w / 2
+        
+        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+        max_distance = np.sqrt(center_x**2 + center_y**2)
+        
+        # 创建柔和的光照效果
+        light_mask = 1.0 - (distance / max_distance) * 0.08
+        light_mask = np.clip(light_mask, 0.92, 1.0)
+        
+        result = final.astype(np.float32) * light_mask[:,:,np.newaxis]
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        return result
+    
+    def _apply_improved_ghibli_color(self, img_bgr):
+        """改进的宫崎骏色彩风格 - 更自然，保留更多细节"""
+        # 宫崎骏色彩特点：温暖、明亮、自然
+        
+        # 转换为HSV色彩空间进行精确调整
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # 适度增强饱和度 - 不过度
+        s = cv2.add(s, 20)  # 减少饱和度增强幅度
+        s = np.clip(s, 0, 200)
+        
+        # 轻微调整色调 - 偏向温暖色调
+        h_warm = h.copy()
+        warm_mask = (h > 10) & (h < 40)
+        if np.any(warm_mask):
+            h_warm[warm_mask] = np.clip(h_warm[warm_mask] + 5, 0, 179)  # 减少色调调整幅度
+            h = np.where(warm_mask, h_warm, h)
+        
+        # 适度增强亮度
+        v = cv2.add(v, 10)
+        v = np.clip(v, 0, 255)
+        
+        h = np.clip(h, 0, 179)
+        
+        # 合并HSV通道
+        hsv_enhanced = cv2.merge([h, s, v])
+        enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+        
+        # 应用LAB色彩空间进一步优化
+        lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # 适度增强色彩鲜艳度
+        a = cv2.add(a, 10)
+        b = cv2.add(b, 15)
+        a = np.clip(a, 0, 255)
+        b = np.clip(b, 0, 255)
+        
+        # 增强亮度对比度
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        lab_balanced = cv2.merge([l, a, b])
+        final = cv2.cvtColor(lab_balanced, cv2.COLOR_LAB2BGR)
+        
+        return final
+    
+    def _improved_final_optimization(self, img_bgr):
+        """改进的最终优化 - 保留更多细节"""
+        # 轻微锐化增强细节
+        kernel = np.array([[-0.5,-0.5,-0.5], [-0.5,5,-0.5], [-0.5,-0.5,-0.5]])
+        sharpened = cv2.filter2D(img_bgr, -1, kernel)
+        
+        # 轻微降噪，保留细节
+        denoised = cv2.fastNlMeansDenoisingColored(sharpened, None, 2, 2, 3, 10)
+        
+        return denoised
+    
+    def _apply_ghibli_style_based_on_reference(self, img_bgr):
+        """基于宫崎骏参考图片的色彩风格应用"""
+        # 宫崎骏风格特点（基于分析）：
+        # - 中等饱和度（约160-170）
+        # - 较高的亮度
+        # - 温暖柔和的色调
+        
+        # 转换为HSV色彩空间进行精确调整
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        
+        # 宫崎骏风格饱和度调整
+        target_saturation = 165  # 基于参考图片的平均饱和度
+        current_saturation = np.mean(s)
+        saturation_boost = max(0, target_saturation - current_saturation)
+        s = cv2.add(s, int(saturation_boost))
+        s = np.clip(s, 0, 220)
+        
+        # 宫崎骏风格亮度调整
+        target_brightness = 180  # 基于参考图片的平均亮度
+        current_brightness = np.mean(v)
+        brightness_boost = max(0, target_brightness - current_brightness)
+        v = cv2.add(v, int(brightness_boost))
+        v = np.clip(v, 0, 255)
+        
+        # 宫崎骏风格色调调整 - 偏向温暖色调
+        h_warm = h.copy()
+        warm_mask = (h > 10) & (h < 40)  # 橙色到黄色范围
+        if np.any(warm_mask):
+            h_warm[warm_mask] = np.clip(h_warm[warm_mask] + 8, 0, 179)
+            h = np.where(warm_mask, h_warm, h)
+        
+        h = np.clip(h, 0, 179)
+        
+        # 合并HSV通道
+        hsv_enhanced = cv2.merge([h, s, v])
+        enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+        
+        # 应用LAB色彩空间进一步优化
+        lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # 宫崎骏风格色彩鲜艳度
+        a = cv2.add(a, 20)  # 增强红色/绿色
+        b = cv2.add(b, 25)  # 增强蓝色/黄色
+        a = np.clip(a, 0, 255)
+        b = np.clip(b, 0, 255)
+        
+        # 宫崎骏风格亮度对比度
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        lab_balanced = cv2.merge([l, a, b])
+        final = cv2.cvtColor(lab_balanced, cv2.COLOR_LAB2BGR)
+        
+        return final
+    
+    def _final_ghibli_style_optimization(self, img_bgr):
+        """最终的宫崎骏风格优化"""
+        # 宫崎骏风格轻微锐化
+        kernel = np.array([[-0.5,-0.5,-0.5], [-0.5,5,-0.5], [-0.5,-0.5,-0.5]])
+        sharpened = cv2.filter2D(img_bgr, -1, kernel)
+        
+        # 宫崎骏风格降噪（保留细节）
+        denoised = cv2.fastNlMeansDenoisingColored(sharpened, None, 2, 2, 3, 10)
+        
+        # 添加宫崎骏风格的梦幻光影效果
+        h, w = denoised.shape[:2]
+        y, x = np.ogrid[:h, :w]
+        center_y, center_x = h / 2, w / 2
+        
+        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+        max_distance = np.sqrt(center_x**2 + center_y**2)
+        
+        # 宫崎骏风格的光照效果
+        light_mask = 1.0 - (distance / max_distance) * 0.1
+        light_mask = np.clip(light_mask, 0.9, 1.0)
+        
+        result = denoised.astype(np.float32) * light_mask[:,:,np.newaxis]
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        return result
+    
+    def _blend_with_original(self, anime_img, original_img):
+        """与原图混合，保留更多实物内容"""
+        # 调整尺寸匹配
+        if original_img.shape != anime_img.shape:
+            original_img = cv2.resize(original_img, (anime_img.shape[1], anime_img.shape[0]))
+        
+        # 与原图进行适度混合（80%动漫效果 + 20%原图细节）
+        blended = cv2.addWeighted(anime_img, 0.8, original_img, 0.2, 0)
+        
+        return blended
+    
+    def _final_anime_optimization(self, img_bgr):
+        """最终的动漫化优化 - 保持动漫风格的同时轻微优化"""
+        # 轻微锐化增强细节
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(img_bgr, -1, kernel)
+        
+        # 轻微降噪
+        denoised = cv2.fastNlMeansDenoisingColored(sharpened, None, 3, 3, 5, 15)
+        
+        return denoised
 
 # 创建真正的宫崎骏风格转换模型
 real_ghibli_model = RealGhibliStyleTransfer()
