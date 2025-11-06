@@ -34,3 +34,6 @@ temp/
 # Temporary files
 test_*
 debug_*
+
+# Model files
+*.pth
