@@ -3,7 +3,6 @@
 宫崎骏风格图片转换器 - 启动脚本
 """
 
-import os
 import sys
 import webbrowser
 import threading
@@ -39,12 +38,12 @@ def check_dependencies():
         try:
             __import__(package)
         except ImportError:
-            missing_packages.append(package)
+                missing_packages.append(package)
     
     if missing_packages:
         print("缺少以下依赖包:")
         for package in missing_packages:
-            print(f"  - {package}")
+            print(f"  - {package}")  # type: ignore
         print("\n请运行: pip3 install -r requirements.txt")
         return False
     

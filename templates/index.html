@@ -401,34 +401,25 @@
                 <p style="margin-top: 10px; color: #666; font-size: 0.9em;">将您的图片一键转换为宫崎骏动漫风格</p>
             </div>
             
-            <!-- 神经网络风格迁移控制面板 -->
-            <div class="neural-controls" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
-                <h4 style="margin-bottom: 15px; color: #333;">🧠 高级神经网络设置</h4>
-                
-                <div class="control-group" style="margin-bottom: 15px;">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="useNeural" checked style="margin-right: 10px;">
-                        <span>启用神经网络风格迁移 (更高质量)</span>
-                    </label>
-                    <p style="font-size: 0.8em; color: #666; margin: 5px 0 0 25px;">使用预训练的深度神经网络进行风格迁移，效果更好但处理时间稍长</p>
-                </div>
-                
-                <div class="control-group" style="margin-bottom: 15px;">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="useEnhanced" style="margin-right: 10px;">
-                        <span>启用增强版功能 (人脸美化+背景处理)</span>
-                    </label>
-                    <p style="font-size: 0.8em; color: #666; margin: 5px 0 0 25px;">集成人脸检测、语义分割、背景处理等专业功能，效果更专业</p>
-                </div>
-                
-                <div class="control-group" style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">风格强度: <span id="intensityValue">1.0</span></label>
-                    <input type="range" id="styleIntensity" min="0.5" max="2.0" step="0.1" value="1.0" 
-                           style="width: 100%; height: 6px; border-radius: 3px; background: #ddd; outline: none;">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #666;">
-                        <span>柔和</span>
-                        <span>适中</span>
-                        <span>强烈</span>
+            <!-- 智能宫崎骏风格转换 -->
+            <div class="style-info" style="margin: 20px 0; padding: 25px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; text-align: center;">
+                <h4 style="margin-bottom: 15px; color: white; font-size: 1.3em;">🎨 宫崎骏动漫风格转换</h4>
+                <p style="color: rgba(255,255,255,0.9); margin-bottom: 15px; font-size: 1.0em; line-height: 1.5;">
+                    基于真实宫崎骏图片训练的深度学习模型<br>
+                    自动还原标准的宫崎骏动漫风格
+                </p>
+                <div style="display: flex; justify-content: center; gap: 30px; margin-top: 20px;">
+                    <div style="color: white;">
+                        <div style="font-size: 2em;">🧠</div>
+                        <div style="font-size: 0.9em;">深度学习</div>
+                    </div>
+                    <div style="color: white;">
+                        <div style="font-size: 2em;">🎯</div>
+                        <div style="font-size: 0.9em;">真实训练</div>
+                    </div>
+                    <div style="color: white;">
+                        <div style="font-size: 2em;">✨</div>
+                        <div style="font-size: 0.9em;">智能优化</div>
                     </div>
                 </div>
             </div>
@@ -496,13 +487,7 @@
         let currentTaskId = null;
         let pollInterval = null;
         
-        // 风格强度滑块实时显示
-        const styleIntensitySlider = document.getElementById('styleIntensity');
-        const intensityValue = document.getElementById('intensityValue');
-        
-        styleIntensitySlider.addEventListener('input', function() {
-            intensityValue.textContent = this.value;
-        });
+        // 标准宫崎骏风格，无需调节参数
         
         // 主题切换
         themeToggle.addEventListener('click', () => {
@@ -573,13 +558,10 @@
             formData.append('file', file);
             
             // 获取神经网络风格迁移参数
-            const useNeural = document.getElementById('useNeural').checked;
-            const useEnhanced = document.getElementById('useEnhanced').checked;
-            const styleIntensity = document.getElementById('styleIntensity').value;
-            
-            formData.append('use_neural', useNeural);
-            formData.append('use_enhanced', useEnhanced);
-            formData.append('style_intensity', styleIntensity);
+            // 使用标准的宫崎骏风格，无需调节参数
+            formData.append('use_neural', 'true');     // 启用神经网络
+            formData.append('use_enhanced', 'true');     // 启用增强功能
+            formData.append('style_intensity', '1.0');   // 固定使用标准强度
             
             // 固定使用宫崎骏风格
             formData.append('style_type', 'ghibli');

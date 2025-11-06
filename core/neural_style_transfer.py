@@ -40,12 +40,12 @@ class NeuralStyleTransfer:
             try:
                 model = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features
             except AttributeError:
-                model = models.vgg19(pretrained=True).features
+                model = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features
         elif model_type == 'resnet50':
             try:
                 model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
             except AttributeError:
-                model = models.resnet50(pretrained=True)
+                model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
         else:
             raise ValueError(f"不支持的模型类型: {model_type}")
         

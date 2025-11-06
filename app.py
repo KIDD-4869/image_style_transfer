@@ -13,9 +13,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 from config.settings import config
-from core.real_ghibli_transfer import RealGhibliStyleTransfer
-from core.ghibli_enhanced import GhibliEnhancedTransfer
-from auto_learning import RealGhibliStyleTransferWithLearning
+from core import ImageProcessorFactory, ProcessingStyle
+from utils.cache_manager import cache_manager
+from utils.task_manager import task_manager, TaskStatus
 
 app = Flask(__name__)
 
@@ -25,84 +25,96 @@ app.config.from_object(config['default'])
 # 创建上传目录
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# 初始化宫崎骏风格转换模型
-real_ghibli_model = RealGhibliStyleTransfer(use_neural_network=True)
-ghibli_enhanced_model = GhibliEnhancedTransfer()
-
-# 任务管理
-task_progress = {}
-task_results = {}
-
-def update_progress(task_id, progress, current_step, total_steps, loss):
-    """更新转换进度"""
-    task_progress[task_id] = {
-        'progress': progress,
-        'current_step': current_step,
-        'total_steps': total_steps,
-        'loss': loss,
-        'timestamp': time.time()
-    }
-    print(f"📊 任务 {task_id}: {progress}% (步骤 {current_step}/{total_steps}, 损失: {loss:.4f})")
-
-def convert_image_async(task_id, image, use_neural=True, style_intensity=1.0, use_enhanced=False):
+def convert_image_async(task_id, image, processor_type="enhanced", style_intensity=1.0):
     """异步转换图像
     
     Args:
         task_id: 任务ID
         image: 输入图像
-        use_neural: 是否使用神经网络风格迁移
+        processor_type: 处理器类型 ("classic", "enhanced", "neural")
         style_intensity: 风格强度 (0.5-2.0)
-        use_enhanced: 是否使用增强版功能
     """
     try:
-        if use_enhanced:
-            # 使用增强版功能
-            print("🎨 使用增强版宫崎骏风格转换")
-            
-            # 设置进度回调
-            ghibli_enhanced_model.set_progress_callback(update_progress, task_id)
-            
-            # 开始转换
-            result_image = ghibli_enhanced_model.apply_enhanced_ghibli_style(image)
+        # 更新任务状态为处理中
+        task_manager.set_task_status(task_id, TaskStatus.PROCESSING)
+        task_manager.update_task_progress(task_id, 5, 1, 20, 0)
+        
+        # 根据类型选择处理器
+        if processor_type == "enhanced":
+            style_type = ProcessingStyle.GHIBLI_ENHANCED
+            params = {
+                "use_face_enhancement": True,
+                "use_bg_separation": True
+            }
+        elif processor_type == "neural":
+            style_type = ProcessingStyle.GHIBLI_NEURAL
+            params = {
+                "num_steps": 100,
+                "style_weight": int(300000 * style_intensity),
+                "content_weight": 1,
+                "use_neural": True
+            }
+        else:  # classic
+            style_type = ProcessingStyle.GHIBLI_CLASSIC
+            params = {
+                "num_steps": 80,
+                "style_weight": int(300000 * style_intensity),
+                "content_weight": 1,
+                "use_neural": False
+            }
+        
+        # 检查缓存
+        cached_result = cache_manager.get_cached_result(image, processor_type, params)
+        if cached_result:
+            result_image = cached_result
+            task_manager.update_task_progress(task_id, 90, 18, 20, 0)
         else:
-            # 使用基础版功能
-            print("🎨 使用基础版宫崎骏风格转换")
+            # 创建处理器
+            try:
+                processor = ImageProcessorFactory.create_processor(style_type)
+            except ValueError as e:
+                raise Exception(f"不支持的处理器类型: {style_type}") from e
+            except Exception as e:
+                raise Exception(f"处理器创建失败: {str(e)}") from e
             
-            # 设置进度回调
-            real_ghibli_model.set_progress_callback(update_progress, task_id)
+            processor.set_progress_callback(lambda tid, progress, current_step, total_steps, loss: 
+                                          task_manager.update_task_progress(tid, progress, current_step, total_steps, loss), 
+                                          task_id)
             
-            # 根据风格强度调整参数
-            style_weight = int(300000 * style_intensity)
-            num_steps = max(50, min(200, int(100 * style_intensity)))
+            # 处理图像
+            try:
+                result = processor.process(image, **params)
+            except Exception as e:
+                raise Exception(f"图像处理失败: {str(e)}") from e
             
-            print(f"🎯 转换参数: 神经网络={use_neural}, 风格强度={style_intensity}, 步数={num_steps}")
+            if not result.success:
+                raise Exception(result.error_message)
             
-            # 开始转换
-            result_image = real_ghibli_model.apply_real_ghibli_style(
-                image, 
-                num_steps=num_steps, 
-                style_weight=style_weight,
-                use_neural=use_neural
-            )
+            result_image = result.image
+            
+            # 保存到缓存
+            try:
+                cache_manager.save_result(image, result_image, processor_type, params)
+            except Exception as e:
+                logger.warning(f"缓存保存失败: {e}")
+                # 缓存失败不影响主要功能
         
-        # 保存结果（包括原图）
-        task_results[task_id] = {
-            'success': True,
+        # 保存结果
+        task_manager.set_task_result(task_id, {
             'result_image': result_image,
-            'original_image': image,  # 保存原图
-            'completed': True
-        }
+            'original_image': image
+        })
         
-        # 更新进度为完成
-        update_progress(task_id, 100, 100, 100, 0)
+        # 更新任务状态为完成
+        task_manager.set_task_status(task_id, TaskStatus.COMPLETED)
+        task_manager.update_task_progress(task_id, 100, 20, 20, 0)
         
     except Exception as e:
-        task_results[task_id] = {
-            'success': False,
-            'error': str(e),
-            'completed': True
-        }
-        print(f"❌ 任务 {task_id} 转换失败: {e}")
+        # 记录错误信息
+        error_msg = str(e)
+        logger.error(f"任务 {task_id} 处理失败: {error_msg}")
+        task_manager.set_task_error(task_id, error_msg)
+        print(f"❌ 任务 {task_id} 转换失败: {error_msg}")
 
 @app.route('/')
 def index():
@@ -112,33 +124,27 @@ def index():
 @app.route('/progress/<task_id>')
 def get_progress(task_id):
     """获取转换进度"""
-    if task_id in task_progress:
-        return jsonify(task_progress[task_id])
-    elif task_id in task_results:
-        # 如果任务已完成，返回完成状态
-        result = task_results[task_id]
-        if result['completed']:
-            return jsonify({
-                'progress': 100,
-                'current_step': 100,
-                'total_steps': 100,
-                'loss': 0,
-                'timestamp': time.time()
-            })
+    task_info = task_manager.get_task(task_id)
+    if task_info:
+        return jsonify(task_info.to_dict())
     
-    # 任务不存在或尚未开始
-    return jsonify({'error': '任务不存在或尚未开始'}), 404
+    # 任务不存在
+    return jsonify({'success': False, 'error': '任务不存在'}), 404
 
 @app.route('/result/<task_id>')
 def get_result(task_id):
     """获取转换结果"""
-    # 首先检查任务是否在结果中
-    if task_id in task_results:
-        result = task_results[task_id]
-        if result['completed']:
-            if result['success']:
+    task_info = task_manager.get_task(task_id)
+    if not task_info:
+        return jsonify({'success': False, 'error': '任务不存在'}), 404
+    
+    # 检查任务状态
+    if task_info.status == TaskStatus.COMPLETED:
+        result_data = task_info.result
+        if result_data:
+            try:
                 # 转换为base64
-                result_image = result['result_image']
+                result_image = result_data['result_image']
                 
                 # 检查结果类型并正确处理
                 if isinstance(result_image, np.ndarray):
@@ -151,7 +157,7 @@ def get_result(task_id):
                 img_str = base64.b64encode(buffered.getvalue()).decode()
                 
                 # 同时返回原图
-                original_image = result.get('original_image')
+                original_image = result_data.get('original_image')
                 if original_image:
                     original_buffered = io.BytesIO()
                     original_image.save(original_buffered, format="JPEG", quality=95)
@@ -166,29 +172,38 @@ def get_result(task_id):
                     'original': f"data:image/jpeg;base64,{original_img_str}",
                     'completed': True
                 })
-            else:
+            except Exception as e:
+                error_msg = f"结果处理失败: {str(e)}"
+                logger.error(error_msg)
                 return jsonify({
                     'success': False,
-                    'error': result['error'],
+                    'error': error_msg,
                     'completed': True
                 })
         else:
-            return jsonify({'success': False, 'error': '转换尚未完成', 'completed': False})
-    
-    # 检查任务是否在进度中但尚未完成
-    if task_id in task_progress:
-        progress = task_progress[task_id]
+            return jsonify({
+                'success': False,
+                'error': '结果数据丢失',
+                'completed': True
+            })
+    elif task_info.status == TaskStatus.FAILED:
+        return jsonify({
+            'success': False,
+            'error': task_info.error_message,
+            'completed': True
+        })
+    elif task_info.status in [TaskStatus.PENDING, TaskStatus.PROCESSING]:
         return jsonify({
             'success': False, 
             'error': '任务仍在处理中', 
             'completed': False,
-            'progress': progress.get('progress', 0),
-            'current_step': progress.get('current_step', 0),
-            'total_steps': progress.get('total_steps', 100)
+            'progress': task_info.progress,
+            'current_step': task_info.current_step,
+            'total_steps': task_info.total_steps
         })
     
-    # 任务不存在或已完成但结果已过期
-    return jsonify({'success': False, 'error': '任务不存在或已完成', 'completed': True})
+    # 其他状态
+    return jsonify({'success': False, 'error': '任务状态未知', 'completed': True})
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -216,7 +231,10 @@ def upload_file():
             return jsonify({'success': False, 'error': f'文件太大，最大支持 {app.config["MAX_CONTENT_LENGTH"] // (1024*1024)}MB'})
         
         # 读取图片
-        image = Image.open(file.stream)
+        try:
+            image = Image.open(file.stream)
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'图片文件损坏或格式不支持: {str(e)}'})
         
         # 检查图片尺寸 - 移除尺寸限制，支持任意尺寸图片
         max_size = app.config.get('MAX_IMAGE_SIZE', 0)
@@ -234,21 +252,34 @@ def upload_file():
         # 生成任务ID
         task_id = str(int(time.time() * 1000))
         
-        # 在启动异步任务之前，先创建进度记录
-        update_progress(task_id, 0, 0, 100, 0)
+        # 创建任务
+        task_manager.create_task(task_id, "image_conversion", {
+            'image_size': image.size,
+            'image_format': image.format
+        })
         
         # 获取处理参数
-        use_neural = request.form.get('use_neural', 'true').lower() == 'true'
-        style_intensity = float(request.form.get('style_intensity', '1.0'))
-        use_enhanced = request.form.get('use_enhanced', 'false').lower() == 'true'
+        processor_type = request.form.get('processor_type', 'enhanced')  # enhanced, neural, classic
+        style_intensity = float(request.form.get('style_intensity', 1.0))
+        
+        # 验证参数
+        if processor_type not in ['classic', 'enhanced', 'neural']:
+            processor_type = 'enhanced'  # 默认值
+            
+        if not (0.5 <= style_intensity <= 2.0):
+            style_intensity = 1.0  # 默认值
         
         # 启动异步转换
-        thread = threading.Thread(target=convert_image_async, args=(task_id, image, use_neural, style_intensity, use_enhanced))
+        thread = threading.Thread(
+            target=convert_image_async, 
+            args=(task_id, image, processor_type, style_intensity)
+        )
         thread.daemon = True
         thread.start()
         
         print(f"🎨 开始异步宫崎骏风格转换，任务ID: {task_id}")
         print(f"📊 图片信息: {image.size[0]}x{image.size[1]}, 格式: {image.format}")
+        print(f"⚙️ 处理器类型: {processor_type}, 风格强度: {style_intensity}")
         
         return jsonify({
             'success': True,
@@ -271,6 +302,85 @@ def upload_file():
         logger.error(f"❌ 转换错误: {error_msg}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': error_msg})
+
+@app.route('/cache/stats')
+def cache_stats():
+    """获取缓存统计信息"""
+    try:
+        stats = cache_manager.get_cache_stats()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        logger.error(f"获取缓存统计信息失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"获取缓存统计信息失败: {str(e)}"
+        })
+
+@app.route('/cache/clear', methods=['POST'])
+def clear_cache():
+    """清空缓存"""
+    try:
+        cache_manager.clear_cache()
+        return jsonify({
+            'success': True,
+            'message': '缓存已清空'
+        })
+    except Exception as e:
+        logger.error(f"清空缓存失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"清空缓存失败: {str(e)}"
+        })
+
+@app.route('/tasks')
+def get_all_tasks():
+    """获取所有任务信息"""
+    try:
+        tasks = task_manager.get_all_tasks()
+        return jsonify({
+            'success': True,
+            'tasks': tasks
+        })
+    except Exception as e:
+        logger.error(f"获取任务信息失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"获取任务信息失败: {str(e)}"
+        })
+
+@app.route('/tasks/active')
+def get_active_tasks():
+    """获取活跃任务信息"""
+    try:
+        tasks = task_manager.get_active_tasks()
+        return jsonify({
+            'success': True,
+            'tasks': tasks
+        })
+    except Exception as e:
+        logger.error(f"获取活跃任务信息失败: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"获取活跃任务信息失败: {str(e)}"
+        })
+
+# 全局错误处理
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'success': False, 'error': '请求的资源不存在'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"内部服务器错误: {error}")
+    return jsonify({'success': False, 'error': '服务器内部错误'}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"未处理的异常: {e}")
+    return jsonify({'success': False, 'error': '服务器发生未知错误'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5006)

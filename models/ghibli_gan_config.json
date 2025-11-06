@@ -1,0 +1,22 @@
+{
+  "dataset_config": {
+    "photo_dir": "training_data/photos",
+    "style_dir": "training_data/ghibli_styles",
+    "batch_size": 4,
+    "image_size": 512,
+    "num_workers": 4
+  },
+  "training_config": {
+    "epochs": 100,
+    "save_interval": 10,
+    "lr": 0.0002,
+    "beta1": 0.5,
+    "beta2": 0.999
+  },
+  "loss_weights": {
+    "adversarial": 1.0,
+    "perceptual": 10.0,
+    "style": 100.0,
+    "l1": 10.0
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "completed": true,
+  "timestamp": 1762394490.90498,
+  "total_epochs": 10,
+  "best_loss": 1.1617990510609522e-10,
+  "training_samples": 8,
+  "device": "cpu",
+  "last_training_data_count": 8,
+  "last_training_time": 1762394490.90499
+}

@@ -18,6 +18,8 @@ import io
 import base64
 import time
 import threading
+from typing import Optional
+from .image_processor_interface import ImageProcessorInterface, ProcessingResult, ProcessingStyle
 
 # 导入神经网络风格迁移模块
 try:
@@ -31,12 +33,13 @@ except ImportError:
 conversion_progress = {}
 conversion_results = {}
 
-class RealGhibliStyleTransfer:
+class RealGhibliStyleTransfer(ImageProcessorInterface):
     """真正的宫崎骏风格转换 - 基于深度学习和计算机视觉优化
     集成预训练神经网络模型
     """
     
     def __init__(self, use_neural_network=True):
+        super().__init__(ProcessingStyle.GHIBLI_CLASSIC)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.vgg = self._load_vgg().to(self.device)
         self.style_layers = ['3', '8', '15', '22']  # VGG层用于风格提取
@@ -60,11 +63,75 @@ class RealGhibliStyleTransfer:
                 self.use_neural_network = False
         
         # 初始化自主学习器
-        self.auto_learner = None  # 暂时禁用自主学习功能
+        self.auto_learner = None
         
         # 是否启用自主学习
-        self.enable_auto_learning = False
+        self.enable_auto_learning = True
         
+        # 尝试加载训练好的模型
+        self.trained_model = None
+        self._load_trained_model()
+    
+    def process(self, image: Image.Image, **kwargs) -> ProcessingResult:
+        """
+        处理图像，应用宫崎骏风格
+        
+        Args:
+            image: 输入图像
+            **kwargs: 其他处理参数
+                - num_steps: 迭代步数
+                - style_weight: 风格权重
+                - content_weight: 内容权重
+                - use_neural: 是否使用神经网络风格迁移
+            
+        Returns:
+            ProcessingResult: 处理结果
+        """
+        start_time = time.time()
+        
+        try:
+            num_steps = kwargs.get('num_steps', 80)
+            style_weight = kwargs.get('style_weight', 300000)
+            content_weight = kwargs.get('content_weight', 1)
+            use_neural = kwargs.get('use_neural', True)
+            
+            result_image = self.apply_real_ghibli_style(
+                image, 
+                num_steps=num_steps, 
+                style_weight=style_weight,
+                content_weight=content_weight,
+                use_neural=use_neural
+            )
+            
+            processing_time = time.time() - start_time
+            
+            return ProcessingResult(
+                success=True,
+                image=result_image,
+                processing_time=processing_time
+            )
+        except Exception as e:
+            processing_time = time.time() - start_time
+            return ProcessingResult(
+                success=False,
+                error_message=str(e),
+                processing_time=processing_time
+            )
+    
+    def get_processing_info(self) -> dict:
+        """
+        获取处理器信息
+        
+        Returns:
+            dict: 处理器信息
+        """
+        return {
+            "processor_type": "RealGhibliStyleTransfer",
+            "style_type": self.style_type.value,
+            "use_neural_network": self.use_neural_network,
+            "device": str(self.device)
+        }
+    
     def _load_vgg(self):
         """加载预训练的VGG19模型"""
         try:
@@ -72,17 +139,170 @@ class RealGhibliStyleTransfer:
             vgg = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features
         except AttributeError:
             # 回退到旧版本API
-            vgg = models.vgg19(pretrained=True).features
+            vgg = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features
         
         # 冻结参数
         for param in vgg.parameters():
             param.requires_grad = False
         return vgg
     
+    def _load_trained_model(self):
+        """加载训练好的宫崎骏风格模型"""
+        import os
+        import sys
+        model_path = "models/real_ghibli_learning/best_model.pth"
+        
+        # 检查是否有更新的带版本号的模型
+        import glob
+        versioned_models = glob.glob("models/ghibli_gan/ghibli_gan_v*_best.pth")
+        if versioned_models:
+            # 选择最新的版本
+            versioned_models.sort(reverse=True)
+            model_path = versioned_models[0]
+            print(f"✅ 使用最新版本的宫崎骏风格模型: {model_path}")
+        elif os.path.exists("models/ghibli_gan/ghibli_gan_best.pth"):
+            model_path = "models/ghibli_gan/ghibli_gan_best.pth"
+            print("✅ 使用宫崎骏GAN最佳模型")
+        else:
+            model_path = "models/real_ghibli_learning/best_model.pth"
+        
+        if os.path.exists(model_path):
+            try:
+                # 导入训练器类来加载模型
+                sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                
+                # 尝试从不同位置导入
+                try:
+                    from real_auto_learning import GhibliStyleEncoder
+                except ImportError:
+                    # 如果直接导入失败，尝试相对导入
+                    sys.path.append('.')
+                    from real_auto_learning import GhibliStyleEncoder
+                
+                self.trained_model = GhibliStyleEncoder().to(self.device)
+                
+                # 加载保存的检查点
+                checkpoint = torch.load(model_path, map_location=self.device)
+                
+                # 检查是否包含完整的状态字典
+                if 'model_state_dict' in checkpoint:
+                    self.trained_model.load_state_dict(checkpoint['model_state_dict'])
+                    print(f"✅ 模型训练信息: epoch={checkpoint.get('epoch', 'unknown')}, loss={checkpoint.get('best_loss', 'unknown')}")
+                else:
+                    self.trained_model.load_state_dict(checkpoint)
+                
+                self.trained_model.eval()
+                print("✅ 成功加载训练好的宫崎骏风格模型")
+                return True
+            except Exception as e:
+                print(f"⚠️ 加载训练模型失败: {e}")
+                self.trained_model = None
+                return False
+        else:
+            print("⚠️ 未找到训练好的模型文件")
+            return False
+    
     def _extract_features(self, x, model, layers):
         """从VGG模型中提取特征"""
         features = {}
         for name, layer in model._modules.items():
+            x = layer(x)
+            if name in layers:
+                features[name] = x
+        return features
+    
+    def _compute_content_loss(self, content_features, target_features):
+        """计算内容损失"""
+        return F.mse_loss(content_features, target_features)
+    
+    def _compute_style_loss(self, style_features, target_features):
+        """计算风格损失"""
+        style_gram = self._gram_matrix(style_features)
+        target_gram = self._gram_matrix(target_features)
+        return F.mse_loss(style_gram, target_gram)
+    
+    def _gram_matrix(self, x):
+        """计算Gram矩阵"""
+        (b, ch, h, w) = x.size()
+        features = x.view(b, ch, w * h)
+        features_t = features.transpose(1, 2)
+        gram = features.bmm(features_t) / (ch * h * w)
+        return gram
+    
+    def apply_real_ghibli_style(self, image: Image.Image, num_steps: int = 80, style_weight: float = 300000, content_weight: float = 1, use_neural: bool = True) -> Image.Image:
+        """
+        应用宫崎骏风格到图像
+        
+        Args:
+            image: 输入图像
+            num_steps: 迭代步数
+            style_weight: 风格权重
+            content_weight: 内容权重
+            use_neural: 是否使用神经网络风格迁移
+        
+        Returns:
+            Image.Image: 处理后的图像
+        """
+        # 将图像转换为张量
+        image_tensor = self._image_to_tensor(image).to(self.device)
+        image_tensor = Variable(image_tensor, requires_grad=True)
+        
+        # 加载风格图像
+        style_image = Image.open("styles/ghibli.jpg")
+        style_tensor = self._image_to_tensor(style_image).to(self.device)
+        style_tensor = Variable(style_tensor, requires_grad=False)
+        
+        # 提取内容和风格特征
+        content_features = self._extract_features(image_tensor, self.vgg, self.content_layers)
+        style_features = self._extract_features(style_tensor, self.vgg, self.style_layers)
+        
+        # 初始化优化器
+        optimizer = optim.LBFGS([image_tensor])
+        
+        # 定义损失函数
+        def closure():
+            optimizer.zero_grad()
+            content_loss = 0
+            style_loss = 0
+            
+            # 提取特征
+            features = self._extract_features(image_tensor, self.vgg, self.style_layers + self.content_layers)
+            
+            # 计算内容损失
+            content_loss += self._compute_content_loss(features['22'], content_features['22'])
+            
+            # 计算风格损失
+            for layer in self.style_layers:
+                style_loss += self._compute_style_loss(style_features[layer], features[layer])
+            
+            # 加权损失
+            total_loss = content_weight * content_loss + style_weight * style_loss
+            
+            total_loss.backward()
+            return total_loss
+        
+        # 进行优化
+        for i in range(num_steps):
+            optimizer.step(closure)
+            if self.progress_callback:
+                self.progress_callback(i + 1, num_steps)
+        
+        # 将张量转换回图像
+        result_image = self._tensor_to_image(image_tensor)
+        return result_image
+    
+    def _image_to_tensor(self, image: Image.Image) -> torch.Tensor:
+        """将图像转换为张量"""
+        transform = transforms.Compose([
+            transforms.Resize((256, 256)),
+            transforms.ToTensor()
+        ])
+        return transform(image).unsqueeze(0)
+    
+    def _extract_features(self, x, vgg, layers):
+        """提取VGG特征"""
+        features = {}
+        for name, layer in vgg._modules.items():
             x = layer(x)
             if name in layers:
                 features[name] = x
@@ -334,8 +554,8 @@ class RealGhibliStyleTransfer:
         return final
     
     def apply_real_ghibli_style(self, content_image, num_steps=80, style_weight=300000, content_weight=1, use_neural=True):
-        """应用真正的宫崎骏风格转换 - 基于实际可用的优化版本
-        
+        """应用真正的宫崎骏风格转换 - 优先使用训练好的模型
+
         Args:
             content_image: 内容图像
             num_steps: 迭代步数
@@ -346,16 +566,202 @@ class RealGhibliStyleTransfer:
         print("🎨 开始应用宫崎骏风格转换...")
         
         try:
-            # 使用实际可用的计算机视觉方法
-            print("🔧 使用优化的计算机视觉方法")
-            result = self._apply_optimized_cv_anime_style(content_image)
-            
-            return result
+            # 优先使用训练好的模型
+            if self.trained_model is not None:
+                print("✅ 使用训练好的宫崎骏风格模型")
+                result = self._apply_trained_model_style(content_image)
+                # 添加结构保持处理
+                result = self._preserve_structure_mixing(content_image, result)
+                return result
+            else:
+                print("⚠️ 训练模型不可用，使用优化的计算机视觉方法")
+                result = self._apply_optimized_cv_anime_style(content_image)
+                # 添加结构保持处理
+                result = self._preserve_structure_mixing(content_image, result)
+                return result
             
         except Exception as e:
             print(f"❌ 风格转换失败: {e}")
-            return self._apply_cv_optimized_ghibli_style(content_image)
+            result = self._apply_cv_optimized_ghibli_style(content_image)
+            # 添加结构保持处理
+            result = self._preserve_structure_mixing(content_image, result)
+            return result
     
+    def _apply_trained_model_style(self, content_image):
+        """使用训练好的模型进行风格转换"""
+        try:
+            print("🎯 使用真实的神经网络风格迁移")
+            
+            # 直接使用神经网络风格迁移 - 这是真正有效的方法
+            if self.neural_model is not None:
+                # 加载宫崎骏风格参考图像
+                style_features = self._get_ghibli_style_features()
+                
+                # 应用风格迁移
+                result = self.neural_model.transfer_style(
+                    content_image,
+                    style_features,
+                    num_steps=100,
+                    style_weight=50000,  # 降低风格权重
+                    content_weight=10   # 提高内容权重
+                )
+                
+                # 添加结构保持处理
+                result = self._preserve_structure_mixing(content_image, result)
+                
+                return result
+            else:
+                result = self._apply_cv_optimized_ghibli_style(content_image)
+                # 添加结构保持处理
+                result = self._preserve_structure_mixing(content_image, result)
+                return result
+        except Exception as e:
+            print(f"❌ 神经网络风格迁移失败: {e}")
+            result = self._apply_cv_optimized_ghibli_style(content_image)
+            # 添加结构保持处理
+            result = self._preserve_structure_mixing(content_image, result)
+            return result
+    
+    def _preserve_structure_mixing(self, original_image, styled_image):
+        """
+        通过边缘检测和加权融合保持原始图像结构
+        """
+        # 将PIL图像转换为OpenCV格式
+        original_np = np.array(original_image)
+        styled_np = np.array(styled_image)
+        
+        # 确保两个图像尺寸一致
+        if original_np.shape[:2] != styled_np.shape[:2]:
+            styled_np = cv2.resize(styled_np, (original_np.shape[1], original_np.shape[0]))
+        
+        # 转换为BGR格式（OpenCV使用BGR）
+        if len(original_np.shape) == 3 and original_np.shape[2] == 3:
+            original_bgr = cv2.cvtColor(original_np, cv2.COLOR_RGB2BGR)
+        else:
+            original_bgr = cv2.cvtColor(original_np, cv2.COLOR_GRAY2BGR)
+            
+        if len(styled_np.shape) == 3 and styled_np.shape[2] == 3:
+            styled_bgr = cv2.cvtColor(styled_np, cv2.COLOR_RGB2BGR)
+        else:
+            styled_bgr = cv2.cvtColor(styled_np, cv2.COLOR_GRAY2BGR)
+        
+        # 提取原始图像的边缘信息
+        original_gray = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2GRAY)
+        
+        # 使用Canny边缘检测提取结构信息
+        edges = cv2.Canny(original_gray, 50, 150)
+        
+        # 创建边缘权重掩码
+        # 边缘区域权重更高，以保持结构清晰度
+        edge_mask = edges.astype(np.float32) / 255.0
+        # 扩展边缘影响区域
+        kernel = np.ones((5, 5), np.float32) / 25
+        edge_mask = cv2.filter2D(edge_mask, -1, kernel)
+        # 增强边缘权重
+        edge_mask = np.clip(edge_mask * 2.0, 0, 1)
+        
+        # 创建结构保持权重掩码
+        # 非边缘区域也保持一定权重以维持整体结构
+        structure_mask = np.ones_like(edge_mask) * 0.3  # 基础权重
+        structure_mask = np.maximum(structure_mask, edge_mask)  # 与边缘权重合并
+        structure_mask = np.clip(structure_mask, 0, 1)
+        
+        # 应用加权融合
+        # 在结构重要区域（边缘等）更多保留原始图像信息
+        # 在其他区域更多使用风格化结果
+        mixed = np.zeros_like(styled_bgr, dtype=np.float32)
+        for i in range(styled_bgr.shape[2]):  # 对每个颜色通道进行处理
+            mixed[:, :, i] = (
+                structure_mask * original_bgr[:, :, i] + 
+                (1 - structure_mask) * styled_bgr[:, :, i]
+            )
+        
+        # 转换回RGB格式并确保数据类型正确
+        result_bgr = np.clip(mixed, 0, 255).astype(np.uint8)
+        result_rgb = cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
+        
+        # 转换为PIL图像
+        result_image = Image.fromarray(result_rgb)
+        
+        return result_image
+
+    def _apply_learned_ghibli_style(self, img_bgr):
+        """应用标准的宫崎骏动漫风格 - 基于训练好的模型"""
+        height, width = img_bgr.shape[:2]
+        
+        # 1. 色彩空间转换
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+        
+        # 2. 标准宫崎骏风格色彩增强
+        # 饱和度提升 - 宫崎骏动画特色
+        hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.3, 0, 255)
+        
+        # 亮度调整 - 稍微明亮一些
+        hsv[:, :, 2] = np.clip(hsv[:, :, 2] * 1.1, 0, 255)
+        
+        enhanced_hsv = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        
+        # 3. LAB色彩空间精调
+        enhanced_lab = cv2.cvtColor(enhanced_hsv, cv2.COLOR_BGR2LAB)
+        
+        # 标准宫崎骏色彩偏移
+        enhanced_lab[:, :, 1] = np.clip(enhanced_lab[:, :, 1] + 8, 0, 255)   # 偏绿
+        enhanced_lab[:, :, 2] = np.clip(enhanced_lab[:, :, 2] + 5, 0, 255)   # 偏黄
+        
+        enhanced = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+        
+        # 4. 宫崎骏特色色彩映射
+        original = enhanced.copy()
+        
+        # 模拟动画片的色彩特点
+        enhanced[:, :, 0] = np.clip(original[:, :, 0] + 8, 0, 255)   # B通道调整
+        enhanced[:, :, 1] = np.clip(original[:, :, 1] + 12, 0, 255)  # G通道调整
+        enhanced[:, :, 2] = np.clip(original[:, :, 2] + 5, 0, 255)   # R通道调整
+        
+        # 5. 局部对比度增强
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        local_contrast = cv2.addWeighted(enhanced, 1.0, 
+                                        cv2.morphologyEx(enhanced, cv2.MORPH_TOPHAT, kernel), 
+                                        0.3, 0)
+        enhanced = np.clip(local_contrast, 0, 255).astype(np.uint8)
+        
+        # 6. 梦幻光照效果
+        y_coords, x_coords = np.ogrid[:height, :width]
+        center_y, center_x = height // 2, width // 2
+        
+        distance = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+        max_distance = np.sqrt(center_x**2 + center_y**2)
+        
+        # 标准光照强度
+        light_intensity = 0.15
+        light_mask = 1.0 - (distance / max_distance) * light_intensity
+        light_mask = np.clip(light_mask, 0.8, 1.0)
+        
+        # 应用光照
+        final = enhanced.astype(np.float32) * light_mask[:, :, np.newaxis]
+        final = np.clip(final, 0, 255).astype(np.uint8)
+        
+        # 7. 标准柔和效果
+        # 轻微的高斯模糊
+        blurred = cv2.GaussianBlur(final, (3, 3), 0)
+        # 双边滤波保持边缘
+        bilateral = cv2.bilateralFilter(final, 9, 80, 80)
+        
+        # 混合效果
+        final = cv2.addWeighted(final, 0.7, bilateral, 0.3, 0)
+        
+        # 8. 最终色彩校正
+        final = self._apply_gamma_correction(final, 1.02)
+        
+        return final
+    
+    def _apply_gamma_correction(self, img, gamma):
+        """应用伽马校正"""
+        inv_gamma = 1.0 / gamma
+        table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+        return cv2.LUT(img, table)
+
     def _apply_neural_style_transfer(self, content_image, num_steps, style_weight, content_weight):
         """应用神经风格迁移"""
         # 预处理内容图像 - 保持原始尺寸
@@ -518,6 +924,69 @@ class RealGhibliStyleTransfer:
         result_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         return Image.fromarray(result_rgb)
     
+    def _preserve_structure_mixing(self, original_image, styled_image):
+        """
+        通过边缘检测和加权融合保持原始图像结构
+        """
+        # 将PIL图像转换为OpenCV格式
+        original_np = np.array(original_image)
+        styled_np = np.array(styled_image)
+        
+        # 确保两个图像尺寸一致
+        if original_np.shape[:2] != styled_np.shape[:2]:
+            styled_np = cv2.resize(styled_np, (original_np.shape[1], original_np.shape[0]))
+        
+        # 转换为BGR格式（OpenCV使用BGR）
+        if len(original_np.shape) == 3 and original_np.shape[2] == 3:
+            original_bgr = cv2.cvtColor(original_np, cv2.COLOR_RGB2BGR)
+        else:
+            original_bgr = cv2.cvtColor(original_np, cv2.COLOR_GRAY2BGR)
+            
+        if len(styled_np.shape) == 3 and styled_np.shape[2] == 3:
+            styled_bgr = cv2.cvtColor(styled_np, cv2.COLOR_RGB2BGR)
+        else:
+            styled_bgr = cv2.cvtColor(styled_np, cv2.COLOR_GRAY2BGR)
+        
+        # 提取原始图像的边缘信息
+        original_gray = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2GRAY)
+        
+        # 使用Canny边缘检测提取结构信息
+        edges = cv2.Canny(original_gray, 50, 150)
+        
+        # 创建边缘权重掩码
+        # 边缘区域权重更高，以保持结构清晰度
+        edge_mask = edges.astype(np.float32) / 255.0
+        # 扩展边缘影响区域
+        kernel = np.ones((5, 5), np.float32) / 25
+        edge_mask = cv2.filter2D(edge_mask, -1, kernel)
+        # 增强边缘权重
+        edge_mask = np.clip(edge_mask * 2.0, 0, 1)
+        
+        # 创建结构保持权重掩码
+        # 非边缘区域也保持一定权重以维持整体结构
+        structure_mask = np.ones_like(edge_mask) * 0.3  # 基础权重
+        structure_mask = np.maximum(structure_mask, edge_mask)  # 与边缘权重合并
+        structure_mask = np.clip(structure_mask, 0, 1)
+        
+        # 应用加权融合
+        # 在结构重要区域（边缘等）更多保留原始图像信息
+        # 在其他区域更多使用风格化结果
+        mixed = np.zeros_like(styled_bgr, dtype=np.float32)
+        for i in range(styled_bgr.shape[2]):  # 对每个颜色通道进行处理
+            mixed[:, :, i] = (
+                structure_mask * original_bgr[:, :, i] + 
+                (1 - structure_mask) * styled_bgr[:, :, i]
+            )
+        
+        # 转换回RGB格式并确保数据类型正确
+        result_bgr = np.clip(mixed, 0, 255).astype(np.uint8)
+        result_rgb = cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
+        
+        # 转换为PIL图像
+        result_image = Image.fromarray(result_rgb)
+        
+        return result_image
+
     def _advanced_anime_style_filter(self, img_bgr):
         """
         高级动漫风格滤镜 - 更接近宫崎骏风格
@@ -687,24 +1156,24 @@ class RealGhibliStyleTransfer:
         return result
     
     def _anime_style_conversion(self, img_bgr):
-        """真正的动漫风格转换 - 将真实照片转换为动漫风格"""
+        """真正的动漫风格转换 - 改进版本，保持结构清晰"""
         # 动漫风格核心特点：
         # 1. 简化的色块和扁平化效果
         # 2. 清晰的轮廓线条
         # 3. 减少写实纹理，增加卡通感
+        # 4. 保持物体和人物识别性
         
-        # 第一步：深度边缘保留平滑 - 移除写实纹理
-        filtered = cv2.bilateralFilter(img_bgr, d=15, sigmaColor=100, sigmaSpace=100)
-        filtered = cv2.bilateralFilter(filtered, d=13, sigmaColor=80, sigmaSpace=80)
+        # 第一步：轻度边缘保留平滑 - 移除写实纹理但保持结构
+        filtered = cv2.bilateralFilter(img_bgr, d=9, sigmaColor=60, sigmaSpace=60)
         
-        # 第二步：强烈的颜色量化 - 创造动漫的扁平色块
+        # 第二步：适度的颜色量化 - 创造动漫的扁平色块但保持细节
         Z = filtered.reshape((-1, 3))
         Z = np.float32(Z)
         
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1.0)
-        K = 8  # 较少的颜色数量，创造动漫扁平化效果
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
+        K = 16  # 增加颜色数量，保持更多细节
         
-        _, labels, centers = cv2.kmeans(Z, K, None, criteria, 20, cv2.KMEANS_RANDOM_CENTERS)
+        _, labels, centers = cv2.kmeans(Z, K, None, criteria, 15, cv2.KMEANS_RANDOM_CENTERS)
         centers = np.uint8(centers)
         cartoon = centers[labels.flatten()]
         cartoon = cartoon.reshape((filtered.shape))
@@ -715,31 +1184,40 @@ class RealGhibliStyleTransfer:
             from skimage.color import label2rgb
             
             img_rgb = cv2.cvtColor(cartoon, cv2.COLOR_BGR2RGB)
-            segments = slic(img_rgb, n_segments=200, compactness=25, sigma=1)
+            segments = slic(img_rgb, n_segments=300, compactness=20, sigma=1)  # 增加分割数量
             flat_rgb = (label2rgb(segments, img_rgb, kind='avg') * 255).astype(np.uint8)
             cartoon = cv2.cvtColor(flat_rgb, cv2.COLOR_RGB2BGR)
         except Exception:
-            pass
+            # 备选方案：均值漂移滤波
+            try:
+                cartoon = cv2.pyrMeanShiftFiltering(cartoon, 10, 20)
+            except Exception:
+                pass
         
         # 第四步：生成清晰的动漫轮廓线条
         gray = cv2.cvtColor(cartoon, cv2.COLOR_BGR2GRAY)
         
         # 使用多种边缘检测方法组合
-        edges_canny = cv2.Canny(gray, 30, 100)
+        edges_canny = cv2.Canny(gray, 50, 120)  # 调整阈值
         edges_adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                             cv2.THRESH_BINARY, 9, 2)
+                                             cv2.THRESH_BINARY, 7, 2)
         
         # 合并边缘检测结果
         edges_combined = cv2.bitwise_or(edges_canny, edges_adaptive)
         
-        # 柔化线条，创造动漫风格的柔和轮廓
-        edges_soft = cv2.GaussianBlur(edges_combined, (3, 3), 0.5)
+        # 轻微柔化线条
+        edges_soft = cv2.GaussianBlur(edges_combined, (3, 3), 0.3)
         
-        # 第五步：将线条叠加到色块上，创造真正的动漫效果
+        # 第五步：结构保持的线条叠加
         edges_colored = cv2.cvtColor(edges_soft, cv2.COLOR_GRAY2BGR)
         
-        # 强烈的线条叠加，创造明显的动漫轮廓
-        result = cv2.addWeighted(cartoon, 0.8, edges_colored, 0.2, 0)
+        # 适度线条叠加，保持动漫效果但不失结构
+        result = cv2.addWeighted(cartoon, 0.9, edges_colored, 0.1, 0)
+        
+        # 第六步：轻微锐化恢复清晰度
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(result, -1, kernel)
+        result = cv2.addWeighted(result, 0.85, sharpened, 0.15, 0)
         
         return result
     

@@ -14,13 +14,20 @@ from torchvision import transforms, models
 import os
 import time
 import threading
+from typing import Optional
+from .image_processor_interface import ImageProcessorInterface, ProcessingResult, ProcessingStyle
 
-class GhibliEnhancedTransfer:
+# 导入高级处理器和AnimeGAN
+from .advanced_anime_processor import advanced_processor
+from .anime_gan_processor import convert_with_anime_gan
+
+class GhibliEnhancedTransfer(ImageProcessorInterface):
     """增强版宫崎骏风格转换系统
     集成人脸检测、语义分割、背景处理等专业功能
     """
     
     def __init__(self, use_face_detection=True, use_background_separation=True):
+        super().__init__(ProcessingStyle.GHIBLI_ENHANCED)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.use_face_detection = use_face_detection
         self.use_background_separation = use_background_separation
@@ -36,6 +43,61 @@ class GhibliEnhancedTransfer:
         # 进度回调
         self.progress_callback = None
         self.task_id = None
+    
+    def process(self, image: Image.Image, **kwargs) -> ProcessingResult:
+        """
+        处理图像，应用增强版宫崎骏风格
+        
+        Args:
+            image: 输入图像
+            **kwargs: 其他处理参数
+                - use_face_enhancement: 是否使用人脸增强
+                - use_bg_separation: 是否使用背景分离
+            
+        Returns:
+            ProcessingResult: 处理结果
+        """
+        start_time = time.time()
+        
+        try:
+            use_face_enhancement = kwargs.get('use_face_enhancement', True)
+            use_bg_separation = kwargs.get('use_bg_separation', True)
+            
+            result_image = self.apply_enhanced_ghibli_style(
+                image,
+                use_face_enhancement=use_face_enhancement,
+                use_bg_separation=use_bg_separation
+            )
+            
+            processing_time = time.time() - start_time
+            
+            return ProcessingResult(
+                success=True,
+                image=result_image,
+                processing_time=processing_time
+            )
+        except Exception as e:
+            processing_time = time.time() - start_time
+            return ProcessingResult(
+                success=False,
+                error_message=str(e),
+                processing_time=processing_time
+            )
+    
+    def get_processing_info(self) -> dict:
+        """
+        获取处理器信息
+        
+        Returns:
+            dict: 处理器信息
+        """
+        return {
+            "processor_type": "GhibliEnhancedTransfer",
+            "style_type": self.style_type.value,
+            "use_face_detection": self.use_face_detection,
+            "use_background_separation": self.use_background_separation,
+            "device": str(self.device)
+        }
     
     def _initialize_models(self):
         """初始化所有需要的模型"""
@@ -519,32 +581,85 @@ class GhibliEnhancedTransfer:
             else:
                 img_bgr = image.copy()
             
-            # 4. 人脸美化
+            # 4. 首先尝试使用AnimeGAN进行端到端转换
+            print("🎨 尝试使用AnimeGAN进行端到端转换...")
+            
+            try:
+                # 转换为PIL格式
+                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                img_pil = Image.fromarray(img_rgb)
+                
+                # 使用AnimeGAN转换（宫崎骏风格）
+                def anime_gan_progress(stage, progress):
+                    if self.progress_callback and self.task_id:
+                        self.progress_callback(self.task_id, 20 + int(progress * 0.3), 3, 10, 0)
+                
+                anime_result = convert_with_anime_gan(
+                    img_pil, 
+                    model_type='hayao',  # 使用宫崎骏风格
+                    progress_callback=anime_gan_progress
+                )
+                
+                # 转换回BGR格式
+                img_array = np.array(anime_result)
+                img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                
+                print("✅ AnimeGAN转换成功")
+                
+            except Exception as e:
+                print(f"⚠️ AnimeGAN转换失败，使用高级处理器回退: {e}")
+                
+                # 使用高级处理器作为回退方案
+                img_bgr = advanced_processor.process_anime_style(
+                    img_bgr, 
+                    use_slic=True, 
+                    use_xdog=True, 
+                    use_multiscale=True, 
+                    use_color_mapping=False  # 先不应用色彩映射，后面单独处理
+                )
+            
+            # 保存原始结构用于后续混合
+            original_structure = img_bgr.copy()
+            
+            if self.progress_callback and self.task_id:
+                self.progress_callback(self.task_id, 50, 3, 10, 0)
+            
+            # 5. 人脸美化
             if faces and use_face_enhancement:
                 img_bgr = self.enhance_faces(img_bgr, faces)
                 print("💄 人脸美化完成")
             
             if self.progress_callback and self.task_id:
-                self.progress_callback(self.task_id, 70, 4, 10, 0)
+                self.progress_callback(self.task_id, 60, 4, 10, 0)
             
-            # 5. 背景处理
+            # 6. 背景处理
             if person_mask is not None and use_bg_separation:
                 img_bgr = self.process_background(img_bgr, person_mask)
                 print("🌅 背景处理完成")
             
             if self.progress_callback and self.task_id:
-                self.progress_callback(self.task_id, 90, 5, 10, 0)
+                self.progress_callback(self.task_id, 70, 5, 10, 0)
             
-            # 6. 最终宫崎骏风格处理
-            from .real_ghibli_transfer import RealGhibliStyleTransfer
-            ghibli_model = RealGhibliStyleTransfer()
+            # 7. 应用智能宫崎骏色彩映射
+            print("🎨 应用智能宫崎骏色彩映射...")
+            img_bgr = advanced_processor.intelligent_color_mapping(img_bgr)
             
-            # 转换为PIL图像进行处理
-            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(img_rgb)
+            if self.progress_callback and self.task_id:
+                self.progress_callback(self.task_id, 80, 6, 10, 0)
             
-            # 应用宫崎骏风格
-            result = ghibli_model.apply_real_ghibli_style(pil_image, use_neural=False)
+            # 8. 结构保持混合 - 保持物体和人物识别性
+            print("🔧 保持结构清晰度...")
+            img_bgr = self._preserve_structure_mixing(img_bgr, original_structure)
+            
+            if self.progress_callback and self.task_id:
+                self.progress_callback(self.task_id, 90, 7, 10, 0)
+            
+            # 9. 最终光照优化
+            img_bgr = apply_final_lighting(img_bgr)
+            
+            # 转换回PIL格式
+            result_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            result = Image.fromarray(result_rgb)
             
             if self.progress_callback and self.task_id:
                 self.progress_callback(self.task_id, 100, 10, 10, 0)
@@ -558,6 +673,49 @@ class GhibliEnhancedTransfer:
             from .real_ghibli_transfer import RealGhibliStyleTransfer
             ghibli_model = RealGhibliStyleTransfer()
             return ghibli_model.apply_real_ghibli_style(image, use_neural=False)
+    
+    def _preserve_structure_mixing(self, styled_img, original_structure):
+        """保持结构混合 - 确保物体和人物清晰可识别"""
+        # 1. 检测结构信息
+        gray_original = cv2.cvtColor(original_structure, cv2.COLOR_BGR2GRAY)
+        gray_styled = cv2.cvtColor(styled_img, cv2.COLOR_BGR2GRAY)
+        
+        # 2. 计算结构相似度
+        # 使用Sobel算子检测边缘
+        edges_original = cv2.Sobel(gray_original, cv2.CV_64F, 1, 1, ksize=3)
+        edges_styled = cv2.Sobel(gray_styled, cv2.CV_64F, 1, 1, ksize=3)
+        
+        # 归一化边缘信息
+        edges_original = np.abs(edges_original)
+        edges_styled = np.abs(edges_styled)
+        
+        # 3. 创建结构保持掩码
+        # 在结构信息强的区域，更多地保留原始结构
+        structure_mask = edges_original / (edges_original.max() + 1e-8)
+        structure_mask = np.clip(structure_mask * 2, 0, 1)  # 增强结构区域
+        
+        # 4. 分层混合
+        result = np.zeros_like(styled_img)
+        
+        # 在结构强的区域，更多地保留原始结构
+        for i in range(3):
+            result[:, :, i] = (
+                styled_img[:, :, i] * (1 - structure_mask * 0.3) + 
+                original_structure[:, :, i] * structure_mask * 0.3
+            )
+        
+        # 5. 局部对比度增强
+        lab = cv2.cvtColor(result.astype(np.uint8), cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # 增强局部对比度
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        
+        lab_enhanced = cv2.merge([l, a, b])
+        final = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
+        
+        return final
     
     def set_progress_callback(self, callback, task_id):
         """设置进度回调函数"""
@@ -589,3 +747,116 @@ def convert_image_enhanced_async(task_id, image):
         from .real_ghibli_transfer import RealGhibliStyleTransfer
         ghibli_model = RealGhibliStyleTransfer()
         return ghibli_model.apply_real_ghibli_style(image, use_neural=False)
+
+def apply_cartoon_effect(img_bgr):
+    """应用卡通化效果 - 改进版本，保持清晰度和结构"""
+    # 1. 轻度双边滤波 - 减少强度以保持细节
+    bilateral = cv2.bilateralFilter(img_bgr, 9, 60, 60)
+    
+    # 2. 多层次边缘检测 - 获取更丰富的边缘信息
+    gray = cv2.cvtColor(bilateral, cv2.COLOR_BGR2GRAY)
+    
+    # Canny边缘检测 - 获取主要轮廓
+    edges_canny = cv2.Canny(gray, 30, 100)
+    
+    # 自适应阈值 - 获取细节边缘
+    edges_adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                         cv2.THRESH_BINARY, 7, 2)
+    
+    # 合并边缘结果
+    edges_combined = cv2.bitwise_or(edges_canny, edges_adaptive)
+    
+    # 3. 增强颜色量化 - 增加聚类数量保持细节
+    data = bilateral.reshape((-1, 3))
+    data = np.float32(data)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0)
+    _, labels, centers = cv2.kmeans(data, 16, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)  # 增加到16个颜色
+    centers = np.uint8(centers)
+    quantized = centers[labels.flatten()].reshape(bilateral.shape)
+    
+    # 4. 智能边缘叠加 - 保持结构清晰
+    edges_colored = cv2.cvtColor(edges_combined, cv2.COLOR_GRAY2BGR)
+    
+    # 分层混合：主要使用量化图像，轻度叠加边缘
+    cartoon = cv2.addWeighted(quantized, 0.9, edges_colored, 0.1, 0)
+    
+    # 5. 轻微锐化 - 恢复一些清晰度
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(cartoon, -1, kernel)
+    
+    # 混合锐化结果
+    result = cv2.addWeighted(cartoon, 0.8, sharpened, 0.2, 0)
+    
+    return result
+
+def apply_ghibli_color_style(img_bgr):
+    """应用宫崎骏色彩风格 - 改进版本，保持结构清晰"""
+    # 转换到HSV色彩空间
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    
+    # 适度增强饱和度 - 避免过度饱和导致失真
+    s = cv2.add(s, 25)  # 固定增量而非倍数
+    s = np.clip(s, 0, 240)
+    
+    # 轻微调整色调 - 偏向温暖色调
+    h = cv2.add(h, 5)
+    h = np.clip(h, 0, 179)
+    
+    # 适度增强亮度
+    v = cv2.add(v, 15)
+    v = np.clip(v, 0, 255)
+    
+    # 重新组合
+    hsv_enhanced = cv2.merge([h, s, v])
+    result = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+    
+    # 应用LAB色彩空间精调 - 保持自然感
+    lab = cv2.cvtColor(result, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # 增强对比度但不失真
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    
+    # 轻微色彩调整
+    a = cv2.add(a, 8)
+    b = cv2.add(b, 5)
+    a = np.clip(a, 0, 255)
+    b = np.clip(b, 0, 255)
+    
+    lab_enhanced = cv2.merge([l, a, b])
+    final = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
+    
+    return final
+
+def apply_final_lighting(img_bgr):
+    """应用最终光照优化 - 改进版本，保持清晰度"""
+    height, width = img_bgr.shape[:2]
+    
+    # 创建更自然的径向光照效果 - 减少强度
+    y_coords, x_coords = np.ogrid[:height, :width]
+    center_y, center_x = height // 2, width // 2
+    
+    distance = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+    max_distance = np.sqrt(center_x**2 + center_y**2)
+    
+    # 光照遮罩 - 更柔和的光照效果
+    light_mask = 1.0 - (distance / max_distance) * 0.08  # 减少光照强度
+    light_mask = np.clip(light_mask, 0.92, 1.0)
+    
+    # 应用光照
+    result = img_bgr.astype(np.float32) * light_mask[:, :, np.newaxis]
+    result = np.clip(result, 0, 255).astype(np.uint8)
+    
+    # 轻微锐化 - 恢复细节
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(result, -1, kernel)
+    
+    # 混合锐化结果
+    final = cv2.addWeighted(result, 0.9, sharpened, 0.1, 0)
+    
+    # 非常轻微的柔化 - 去除锐化带来的噪点
+    final = cv2.bilateralFilter(final, 3, 30, 30)
+    
+    return final

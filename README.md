@@ -93,6 +93,9 @@ image_style_transfer/
 ├── utils/              # 工具模块
 │   ├── __init__.py
 │   └── image_utils.py
+├── tests/              # 测试文件
+│   ├── __init__.py
+│   └── test_*.py       # 各类测试脚本
 ├── templates/          # 网页模板
 │   └── index.html
 ├── static/             # 静态文件
