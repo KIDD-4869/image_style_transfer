@@ -13,91 +13,67 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 from config.settings import config
+from config.dependency_injection import get_container
 from core import ImageProcessorFactory, ProcessingStyle
-from utils.cache_manager import cache_manager
+from core.model_manager import model_manager
+from utils.optimized_cache import optimized_cache_manager
 from utils.task_manager import task_manager, TaskStatus
+from utils.async_processor import get_async_processor
+from utils.error_handler import handle_errors, error_handler
+from utils.logging_config import setup_logging, logging_manager, perf_logger
+from utils.health_check import health_monitor, setup_health_monitoring
 
 app = Flask(__name__)
 
 # 加载配置
 app.config.from_object(config['default'])
 
+# 设置日志系统
+setup_logging(
+    level=app.config.get('MONITORING', {}).get('log_level', 'INFO'),
+    enable_console=True,
+    enable_file=True,
+    enable_structured=True
+)
+
+# 设置健康监控
+setup_health_monitoring(model_manager, optimized_cache_manager)
+
 # 创建上传目录
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-def convert_image_async(task_id, image, processor_type="enhanced", style_intensity=1.0):
-    """异步转换图像
+# 配置依赖注入
+container = get_container()
+container.register_instance(type(model_manager), model_manager)
+container.register_instance(type(optimized_cache_manager), optimized_cache_manager)
+container.register_instance(type(task_manager), task_manager)
+
+def convert_image_async(task_id, image, processor_type="ghibli", style_intensity=1.0):
+    """异步转换图像 - 使用新的宫崎骏风格转换器
     
     Args:
         task_id: 任务ID
         image: 输入图像
-        processor_type: 处理器类型 ("classic", "enhanced", "neural")
-        style_intensity: 风格强度 (0.5-2.0)
+        processor_type: 处理器类型 (固定为"ghibli")
+        style_intensity: 风格强度 (忽略，固定使用标准宫崎骏风格)
     """
     try:
         # 更新任务状态为处理中
         task_manager.set_task_status(task_id, TaskStatus.PROCESSING)
-        task_manager.update_task_progress(task_id, 5, 1, 20, 0)
+        task_manager.update_task_progress(task_id, 5, 1, 10, 0)
         
-        # 根据类型选择处理器
-        if processor_type == "enhanced":
-            style_type = ProcessingStyle.GHIBLI_ENHANCED
-            params = {
-                "use_face_enhancement": True,
-                "use_bg_separation": True
-            }
-        elif processor_type == "neural":
-            style_type = ProcessingStyle.GHIBLI_NEURAL
-            params = {
-                "num_steps": 100,
-                "style_weight": int(300000 * style_intensity),
-                "content_weight": 1,
-                "use_neural": True
-            }
-        else:  # classic
-            style_type = ProcessingStyle.GHIBLI_CLASSIC
-            params = {
-                "num_steps": 80,
-                "style_weight": int(300000 * style_intensity),
-                "content_weight": 1,
-                "use_neural": False
-            }
+        # 使用新的宫崎骏风格转换器
+        from core.true_ghibli_style import true_ghibli_processor
         
-        # 检查缓存
-        cached_result = cache_manager.get_cached_result(image, processor_type, params)
-        if cached_result:
-            result_image = cached_result
-            task_manager.update_task_progress(task_id, 90, 18, 20, 0)
-        else:
-            # 创建处理器
-            try:
-                processor = ImageProcessorFactory.create_processor(style_type)
-            except ValueError as e:
-                raise Exception(f"不支持的处理器类型: {style_type}") from e
-            except Exception as e:
-                raise Exception(f"处理器创建失败: {str(e)}") from e
-            
-            processor.set_progress_callback(lambda tid, progress, current_step, total_steps, loss: 
-                                          task_manager.update_task_progress(tid, progress, current_step, total_steps, loss), 
-                                          task_id)
-            
-            # 处理图像
-            try:
-                result = processor.process(image, **params)
-            except Exception as e:
-                raise Exception(f"图像处理失败: {str(e)}") from e
-            
-            if not result.success:
-                raise Exception(result.error_message)
-            
-            result_image = result.image
-            
-            # 保存到缓存
-            try:
-                cache_manager.save_result(image, result_image, processor_type, params)
-            except Exception as e:
-                logger.warning(f"缓存保存失败: {e}")
-                # 缓存失败不影响主要功能
+        # 设置进度回调
+        true_ghibli_processor.set_progress_callback(
+            lambda tid, progress, current_step, total_steps, loss: 
+                task_manager.update_task_progress(tid, progress, current_step, total_steps, loss), 
+            task_id
+        )
+        
+        # 应用宫崎骏风格
+        result_image = true_ghibli_processor.apply_ghibli_style(image)
         
         # 保存结果
         task_manager.set_task_result(task_id, {
@@ -107,7 +83,9 @@ def convert_image_async(task_id, image, processor_type="enhanced", style_intensi
         
         # 更新任务状态为完成
         task_manager.set_task_status(task_id, TaskStatus.COMPLETED)
-        task_manager.update_task_progress(task_id, 100, 20, 20, 0)
+        task_manager.update_task_progress(task_id, 100, 10, 10, 0)
+        
+        print(f"✅ 任务 {task_id} 宫崎骏风格转换完成")
         
     except Exception as e:
         # 记录错误信息
@@ -258,16 +236,9 @@ def upload_file():
             'image_format': image.format
         })
         
-        # 获取处理参数
-        processor_type = request.form.get('processor_type', 'enhanced')  # enhanced, neural, classic
-        style_intensity = float(request.form.get('style_intensity', 1.0))
-        
-        # 验证参数
-        if processor_type not in ['classic', 'enhanced', 'neural']:
-            processor_type = 'enhanced'  # 默认值
-            
-        if not (0.5 <= style_intensity <= 2.0):
-            style_intensity = 1.0  # 默认值
+        # 固定使用宫崎骏风格
+        processor_type = "ghibli"  # 固定使用宫崎骏风格
+        style_intensity = 1.0  # 固定风格强度
         
         # 启动异步转换
         thread = threading.Thread(
@@ -279,7 +250,7 @@ def upload_file():
         
         print(f"🎨 开始异步宫崎骏风格转换，任务ID: {task_id}")
         print(f"📊 图片信息: {image.size[0]}x{image.size[1]}, 格式: {image.format}")
-        print(f"⚙️ 处理器类型: {processor_type}, 风格强度: {style_intensity}")
+        print(f"⚙️ 使用标准宫崎骏风格转换器")
         
         return jsonify({
             'success': True,
@@ -307,7 +278,7 @@ def upload_file():
 def cache_stats():
     """获取缓存统计信息"""
     try:
-        stats = cache_manager.get_cache_stats()
+        stats = optimized_cache_manager.get_cache_stats()
         return jsonify({
             'success': True,
             'stats': stats
@@ -323,7 +294,7 @@ def cache_stats():
 def clear_cache():
     """清空缓存"""
     try:
-        cache_manager.clear_cache()
+        optimized_cache_manager.clear_cache()
         return jsonify({
             'success': True,
             'message': '缓存已清空'
@@ -383,4 +354,4 @@ def handle_exception(e):
     return jsonify({'success': False, 'error': '服务器发生未知错误'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5006)
+    app.run(debug=True, host='0.0.0.0', port=5003)

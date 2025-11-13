@@ -554,7 +554,7 @@ class RealGhibliStyleTransfer(ImageProcessorInterface):
         return final
     
     def apply_real_ghibli_style(self, content_image, num_steps=80, style_weight=300000, content_weight=1, use_neural=True):
-        """应用真正的宫崎骏风格转换 - 优先使用训练好的模型
+        """应用真正的宫崎骏风格转换
 
         Args:
             content_image: 内容图像
@@ -566,26 +566,22 @@ class RealGhibliStyleTransfer(ImageProcessorInterface):
         print("🎨 开始应用宫崎骏风格转换...")
         
         try:
-            # 优先使用训练好的模型
-            if self.trained_model is not None:
-                print("✅ 使用训练好的宫崎骏风格模型")
-                result = self._apply_trained_model_style(content_image)
-                # 添加结构保持处理
-                result = self._preserve_structure_mixing(content_image, result)
-                return result
-            else:
-                print("⚠️ 训练模型不可用，使用优化的计算机视觉方法")
-                result = self._apply_optimized_cv_anime_style(content_image)
-                # 添加结构保持处理
-                result = self._preserve_structure_mixing(content_image, result)
-                return result
+            # 使用新的简化但有效的算法
+            from .true_ghibli_style import true_ghibli_processor
+            
+            # 设置进度回调
+            true_ghibli_processor.set_progress_callback(self.progress_callback, self.task_id)
+            
+            # 应用宫崎骏风格
+            result = true_ghibli_processor.apply_ghibli_style(content_image)
+            
+            print("✅ 宫崎骏风格转换完成")
+            return result
             
         except Exception as e:
             print(f"❌ 风格转换失败: {e}")
-            result = self._apply_cv_optimized_ghibli_style(content_image)
-            # 添加结构保持处理
-            result = self._preserve_structure_mixing(content_image, result)
-            return result
+            # 备用方法
+            return self._fallback_simple_ghibli(content_image)
     
     def _apply_trained_model_style(self, content_image):
         """使用训练好的模型进行风格转换"""
@@ -1465,76 +1461,39 @@ class RealGhibliStyleTransfer(ImageProcessorInterface):
         
         return image
     
-    def _fallback_traditional_method(self, image):
-        """备选传统方法"""
-        print("⚠️ 使用备选传统方法")
+    def _fallback_simple_ghibli(self, image):
+        """简化的宫崎骏风格备用方法"""
+        print("⚠️ 使用简化的宫崎骏风格方法")
         
-        # 将PIL图像转换为numpy数组
+        # 转换为OpenCV格式
         img_np = np.array(image)
-        
-        # 转换为BGR格式
-        if len(img_np.shape) == 3 and img_np.shape[2] == 3:
+        if img_np.ndim == 3 and img_np.shape[2] == 3:
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         else:
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
         
-        # 高质量的宫崎骏风格处理
+        # 1. 边缘保留平滑
+        smooth = cv2.bilateralFilter(img_bgr, 9, 75, 75)
         
-        # 1. 保持原始分辨率
-        h, w = img_bgr.shape[:2]
-        max_size = 2000
-        if max(h, w) > max_size:
-            scale = max_size / max(h, w)
-            new_w, new_h = int(w * scale), int(h * scale)
-            img_bgr = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+        # 2. 宫崎骏色彩
+        hsv = cv2.cvtColor(smooth, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
         
-        # 2. 智能边缘保留（重点改进人物区域）
-        # 使用双边滤波替代导向滤波
-        guided = cv2.bilateralFilter(img_bgr, d=11, sigmaColor=80, sigmaSpace=80)
+        # 增强饱和度和亮度
+        s = np.clip(s * 1.2, 0, 255).astype(np.uint8)
+        v = np.clip(v * 1.1, 0, 255).astype(np.uint8)
         
-        # 3. 宫崎骏风格色彩调整
-        # 转换为LAB色彩空间进行更精确的色彩调整
-        # 确保图像是3通道的BGR格式
-        if len(guided.shape) == 2:
-            guided = cv2.cvtColor(guided, cv2.COLOR_GRAY2BGR)
-        elif guided.shape[2] == 1:
-            guided = cv2.cvtColor(guided, cv2.COLOR_GRAY2BGR)
-            
-        lab = cv2.cvtColor(guided, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
+        hsv_enhanced = cv2.merge([h, s, v])
+        result = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
         
-        # 增强色彩鲜艳度（宫崎骏风格特点）
-        a = cv2.addWeighted(a, 1.2, a, 0, 0)
-        b = cv2.addWeighted(b, 1.2, b, 0, 0)
-        
-        # 调整亮度和对比度
-        l = cv2.createCLAHE(clipLimit=2.0).apply(l)
-        
-        lab_enhanced = cv2.merge([l, a, b])
-        enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
-        
-        # 4. 添加梦幻光影效果
-        h, w = enhanced.shape[:2]
-        
-        # 创建柔和的光照效果
-        y, x = np.ogrid[:h, :w]
-        center_y, center_x = h / 2, w / 2
-        
-        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-        max_distance = np.sqrt(center_x**2 + center_y**2)
-        
-        # 创建光照遮罩
-        light_mask = 1.0 - (distance / max_distance) * 0.15
-        light_mask = np.clip(light_mask, 0.85, 1.0)
-        
-        # 应用光照效果
-        final = enhanced.astype(np.float32) * light_mask[:,:,np.newaxis]
-        final = np.clip(final, 0, 255).astype(np.uint8)
+        # 3. 轻微锐化
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(result, -1, kernel)
+        result = cv2.addWeighted(result, 0.8, sharpened, 0.2, 0)
         
         # 转换回RGB
-        result_rgb = cv2.cvtColor(final, cv2.COLOR_BGR2RGB)
-        
-        return result_rgb
+        result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(result_rgb)
 
     def _subtle_color_optimization(self, img_bgr):
         """轻微的色彩优化 - 保持原图色彩，只做轻微调整"""
