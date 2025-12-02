@@ -17,7 +17,13 @@ class NeuralStyleTransfer:
     """基于预训练模型的神经网络风格迁移"""
     
     def __init__(self, model_type='vgg19'):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # 检查可用的最佳设备
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         self.model_type = model_type
         self.model = self._load_pretrained_model(model_type)
         

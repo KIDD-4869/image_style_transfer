@@ -1,0 +1,123 @@
+# Enhanced Ghibli Processor Configuration
+
+# Model Configuration
+models:
+  base_model: "runwayml/stable-diffusion-v1-5"  # Stable Diffusion base model
+  lora_model: "ghibli-style-lora-v1"    # Ghibli LoRA (optional)
+  lora_weight: 0.9  # 提高LoRA权重以增强风格
+  controlnet_model: "lllyasviel/control_v11p_sd15_canny"  # ControlNet for structure preservation
+  
+# Device Configuration
+device:
+  auto_detect: true
+  preferred: "cpu"  # cuda, cpu, or mps (for Mac)
+  dtype: "float32"   # float16 for GPU, float32 for CPU
+  
+# Processing Modes Configuration
+modes:
+  fast:
+    strength: 0.45  # 平衡内容保留和风格化
+    num_inference_steps: 25
+    guidance_scale: 7.5
+    scheduler: "euler_a"
+    controlnet_conditioning_scale: 0.6
+    
+  balanced:
+    strength: 0.50  # 平衡内容保留和风格化
+    num_inference_steps: 40
+    guidance_scale: 8.0
+    scheduler: "dpm_2m_karras"
+    controlnet_conditioning_scale: 0.65
+    
+  quality:
+    strength: 0.55  # 平衡内容保留和风格化
+    num_inference_steps: 60
+    guidance_scale: 8.5
+    scheduler: "dpm_2m_karras"
+    controlnet_conditioning_scale: 0.7
+    
+  ultra:
+    strength: 0.60  # 平衡内容保留和风格化
+    num_inference_steps: 80
+    guidance_scale: 9.0
+    scheduler: "dpm_2m_karras"
+    controlnet_conditioning_scale: 0.75
+
+# Prompt Configuration
+prompts:
+  base_positive: >
+    Studio Ghibli anime style, Hayao Miyazaki art,
+    hand-drawn animation, cel shading, soft lighting,
+    vibrant colors, dreamy atmosphere, whimsical,
+    detailed background, painterly, watercolor style,
+    magical realism, high quality, masterpiece,
+    anime aesthetic, stylized illustration,
+    warm color palette, gentle shadows
+    
+  content_keywords:
+    portrait: "anime character, expressive eyes, soft features, stylized face"
+    landscape: "natural scenery, lush vegetation, sky and clouds, anime background"
+    architecture: "detailed buildings, clean lines, perspective, anime architecture"
+    mixed: "balanced composition, harmonious elements, anime style"
+    
+  negative: >
+    photorealistic, photo, realistic, 3d render, cgi,
+    blurry, low quality, bad anatomy, deformed, ugly,
+    watermark, text, signature, cropped, out of frame,
+    worst quality, low res, jpeg artifacts, duplicate,
+    morbid, mutilated, extra limbs, poorly drawn,
+    wrong subject, different content, changed composition
+
+# ControlNet Configuration
+controlnet:
+  enabled: true  # 启用以保持图像结构
+  type: "canny"  # canny or depth
+  canny_low_threshold: 80   # 降低阈值，允许更多细节变化
+  canny_high_threshold: 180  # 降低阈值，允许更多风格化
+  
+# Preprocessing Configuration
+preprocessing:
+  brightness_threshold: 100  # Images darker than this will be brightened
+  brightness_boost: 20       # Amount to increase brightness
+  contrast_threshold: 3.0    # Images with contrast above this will be softened
+  contrast_reduction: 0.15   # Percentage to reduce contrast
+  target_size: 512          # Target size for processing
+  
+# Postprocessing Configuration
+postprocessing:
+  sharpen_enabled: true
+  sharpen_amount: 0.4  # 增强锐化
+  saturation_enabled: true
+  saturation_factor: 1.3  # 增强饱和度
+  warm_tone_enabled: true
+  warm_tone_strength: 0.20  # 增强暖色调
+  quality_check_enabled: true
+  min_ssim_threshold: 0.80  # 降低阈值，允许更多风格化
+
+# Quality Metrics Configuration
+quality_metrics:
+  enabled: true
+  calculate_sharpness: true
+  calculate_edge_clarity: true
+  calculate_color_harmony: true
+  min_overall_score: 70  # Minimum acceptable quality score
+
+# Experiment Mode Configuration
+experiment_mode:
+  enabled: false
+  num_variations: 3
+  save_comparisons: true
+  
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "logs/enhanced_processor.log"
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  log_processing_details: true
+  log_quality_metrics: true
+
+# Cache Configuration
+cache:
+  enabled: true
+  model_cache_dir: "default"  # 使用 HuggingFace 默认缓存 (~/.cache/huggingface)，或指定自定义路径
+  max_cache_size_gb: 20

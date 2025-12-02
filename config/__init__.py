@@ -1,3 +1,7 @@
 """
-配置管理模块初始化文件
+配置模块
 """
+
+from .settings import AppConfig, get_config, reload_config, config
+
+__all__ = ['AppConfig', 'get_config', 'reload_config', 'config']

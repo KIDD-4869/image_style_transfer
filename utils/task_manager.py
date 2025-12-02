@@ -95,7 +95,7 @@ class TaskInfo:
 class TaskManager:
     """任务管理器"""
     
-    def __init__(self, max_tasks: int = 1000, task_timeout_hours: int = 24):
+    def __init__(self, max_tasks: int = 50, task_timeout_hours: int = 2):
         self.max_tasks = max_tasks
         self.task_timeout_hours = task_timeout_hours
         self.tasks: Dict[str, TaskInfo] = {}
@@ -107,7 +107,7 @@ class TaskManager:
         """启动清理定时器"""
         if self.cleanup_timer:
             self.cleanup_timer.cancel()
-        self.cleanup_timer = threading.Timer(3600, self._cleanup_expired_tasks)
+        self.cleanup_timer = threading.Timer(300, self._cleanup_expired_tasks)  # 5分钟清理一次
         self.cleanup_timer.daemon = True
         self.cleanup_timer.start()
     

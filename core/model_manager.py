@@ -32,7 +32,7 @@ class ModelManager:
             return
         
         self._initialized = True
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = self._get_optimal_device()
         self._models: Dict[str, torch.nn.Module] = {}
         self._model_lock = threading.RLock()
         
@@ -41,6 +41,19 @@ class ModelManager:
         self.cleanup_threshold = 0.7  # 内存清理阈值
         
         logger.info(f"ModelManager initialized with device: {self.device}")
+    
+    def _get_optimal_device(self) -> torch.device:
+        """获取最优计算设备"""
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            logger.info("Using CUDA device")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = torch.device("mps")
+            logger.info("Using MPS device")
+        else:
+            device = torch.device("cpu")
+            logger.info("Using CPU device")
+        return device
     
     def get_vgg19(self) -> torch.nn.Module:
         """获取VGG19模型，使用延迟加载和内存优化"""
@@ -104,6 +117,9 @@ class ModelManager:
         # 清理PyTorch缓存
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            # MPS设备不需要显式清理缓存
+            pass
         
         # 强制垃圾回收
         gc.collect()
@@ -127,6 +143,12 @@ class ModelManager:
             gpu_memory = {
                 'allocated': torch.cuda.memory_allocated() / 1024**3,  # GB
                 'cached': torch.cuda.memory_reserved() / 1024**3,  # GB
+            }
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            # MPS设备的内存信息
+            gpu_memory = {
+                'allocated': 0,  # MPS不提供详细内存分配信息
+                'cached': 0,
             }
         
         return {
